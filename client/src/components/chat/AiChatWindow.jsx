@@ -1,457 +1,458 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Send, 
-  Sparkles, 
-  RotateCcw, 
-  Copy, 
-  Check, 
-  Paperclip, 
-  Globe, 
-  BookOpen, 
+import {
+  Send,
+  Sparkles,
+  RotateCcw,
+  Copy,
+  Check,
+  Paperclip,
+  Globe,
+  BookOpen,
   Terminal,
   Sigma,
-  User
+  User,
 } from 'lucide-react';
-
-import { Heading, Text } from '../ui/Typography';
-import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
 import { useToast } from '../ui/Toast';
 import { Loader } from '../ui/Loader';
 
-export function AiChatWindow() {
-  const toast = useToast();
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [isCopilot, setIsCopilot] = useState(true);
-  const [streamingIndex, setStreamingIndex] = useState(null);
-  const [streamingText, setStreamingText] = useState('');
-  const [activeSources, setActiveSources] = useState([]);
-  const messagesEndRef = useRef(null);
+/* ─── Inline markdown parser (no deps) ────────────────────────────── */
+function renderAiContent(raw) {
+  if (!raw) return null;
 
-  const suggestions = [
-    {
-      id: 'quicksort',
-      title: 'Analyze Quicksort Complexity',
-      query: 'Analyze the mathematical complexity bounds of the Quicksort algorithm and show a code block.',
-      icon: Terminal
-    },
-    {
-      id: 'svm',
-      title: 'Derive SVM Margins',
-      query: 'Explain Support Vector Machines margin classification and derive the primal optimization formula.',
-      icon: Sigma
-    },
-    {
-      id: 'k-maps',
-      title: 'Simplify K-Maps',
-      query: 'What are the rules to simplify logic using Karnaugh Maps (K-Maps)? Include a simple boolean expression.',
-      icon: BookOpen
-    }
-  ];
+  // Split on triple-back-tick code blocks first
+  const segments = raw.split(/(```[\s\S]*?```)/g);
 
-  const handleSubmit = async (e) => {
-    e?.preventDefault();
-    if (!input.trim()) return;
-
-    const userQuery = input;
-    setInput('');
-
-    const userMsg = { id: Date.now(), sender: 'user', text: userQuery };
-    const aiMsgId = Date.now() + 1;
-    const aiMsg = { 
-      id: aiMsgId, 
-      sender: 'ai', 
-      text: '', 
-      sources: [], 
-      isStreaming: true 
-    };
-
-    setMessages((prev) => [...prev, userMsg, aiMsg]);
-
-    try {
-      const res = await api.post('/ai/ask/', { query: userQuery });
-      const answerText = res.data.answer || res.data.response || `Received query: "${userQuery}". Connect registered data source for indexed analysis.`;
-      const sources = res.data.citations ? res.data.citations.map((c, i) => ({
-        id: i + 1,
-        title: c.document_title || 'Registered Document',
-        url: '#',
-        site: `Page ${c.page_number || 1}`
-      })) : [];
-      
-      setActiveSources(sources);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMsgId ? { ...msg, sources } : msg
-        )
+  return segments.map((seg, i) => {
+    // Code block
+    if (seg.startsWith('```')) {
+      const lines = seg.slice(3).split('\n');
+      const lang = lines[0].trim() || 'code';
+      const code = lines.slice(1).join('\n').replace(/```$/, '').trimEnd();
+      return (
+        <div
+          key={i}
+          className="my-3 rounded-lg overflow-hidden font-mono text-xs"
+          style={{
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          <div
+            className="flex items-center justify-between px-3 py-1.5 text-[10px] uppercase tracking-wider select-none"
+            style={{
+              background: 'var(--bg-hover)',
+              borderBottom: '1px solid var(--border)',
+              color: 'var(--fg-3)',
+            }}
+          >
+            <span>{lang}</span>
+          </div>
+          <pre className="p-3 overflow-x-auto leading-relaxed whitespace-pre" style={{ color: 'var(--fg)' }}>
+            <code>{code}</code>
+          </pre>
+        </div>
       );
-      streamResponse(answerText, aiMsgId);
-    } catch (_err) {
-      const fallbackText = `I have received your query: "${userQuery}". No registered files were found matching this prompt. Please upload your course documents to begin indexed retrieval.`;
-      streamResponse(fallbackText, aiMsgId);
-    }
-  };
-
-  const handleSuggestionClick = (query) => {
-    setInput(query);
-  };
-
-  const [copiedId, setCopiedId] = useState(null);
-  const handleCopyToClipboard = (id, text) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    toast.success('Message copied to clipboard.');
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const handleRegenerate = (id) => {
-    const aiMsg = messages.find((m) => m.id === id);
-    if (!aiMsg) return;
-
-    const searchKey = Object.keys(mockDatabase).find(
-      (key) => (aiMsg.text.includes('Quicksort') && key === 'quicksort') ||
-               (aiMsg.text.includes('Vector') && key === 'svm') ||
-               (aiMsg.text.includes('Karnaugh') && key === 'k-maps')
-    );
-
-    const matchText = searchKey ? mockDatabase[searchKey].text : aiMsg.text;
-
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === id ? { ...msg, text: '', isStreaming: true } : msg
-      )
-    );
-
-    toast.info('Regenerating response...');
-    setTimeout(() => {
-      streamResponse(matchText, id);
-    }, 400);
-  };
-
-  const renderMessageContent = (text, isAi) => {
-    if (!isAi) return <p className="text-sm font-sans text-[#FAFAFA]">{text}</p>;
-
-    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = codeBlockRegex.exec(text)) !== null) {
-      const precedingText = text.substring(lastIndex, match.index);
-      if (precedingText) {
-        parts.push({ type: 'text', content: precedingText });
-      }
-      parts.push({ type: 'code', lang: match[1] || 'code', content: match[2] });
-      lastIndex = codeBlockRegex.lastIndex;
     }
 
-    const remainingText = text.substring(lastIndex);
-    if (remainingText) {
-      parts.push({ type: 'text', content: remainingText });
-    }
-
+    // Plain / bold text
+    const lines = seg.split('\n').filter(Boolean);
     return (
-      <div className="flex flex-col gap-4 font-sans text-sm text-[#FAFAFA] leading-relaxed">
-        {parts.map((part, pIdx) => {
-          if (part.type === 'code') {
-            return (
-              <div key={pIdx} className="rounded-2xl border border-white/[0.05] bg-[#09090B] text-[#FAFAFA] overflow-hidden flex flex-col font-mono text-xs my-2 shadow-sm">
-                <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.05] bg-[#18181B] select-none text-[11px] text-[#71717A]">
-                  <span className="uppercase font-medium">{part.lang}</span>
-                  <button 
-                    onClick={() => handleCopyToClipboard(pIdx + '_code', part.content)}
-                    className="flex items-center gap-1.5 hover:text-[#FAFAFA] cursor-pointer"
-                  >
-                    {copiedId === pIdx + '_code' ? (
-                      <>
-                        <Check className="w-3 h-3 text-[#10B981]" />
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" />
-                        Copy Code
-                      </>
-                    )}
-                  </button>
-                </div>
-                <pre className="p-4 overflow-x-auto leading-normal">
-                  <code>{part.content}</code>
-                </pre>
-              </div>
-            );
-          }
-
-          const subText = part.content;
-          const subParts = subText.split(/(\$\$[\s\S]*?\$\$)/g);
-
+      <div key={i} className="flex flex-col gap-1.5">
+        {lines.map((line, j) => {
+          const parts = line.split(/(\*\*.*?\*\*)/g);
           return (
-            <div key={pIdx} className="flex flex-col gap-3">
-              {subParts.map((subPart, sIdx) => {
-                if (subPart.startsWith('$$') && subPart.endsWith('$$')) {
-                  const formula = subPart.substring(2, subPart.length - 2).trim();
-                  return (
-                    <div 
-                      key={sIdx} 
-                      className="py-4 px-6 rounded-2xl border border-[#2563EB]/20 bg-[#2563EB]/10 flex items-center justify-center my-2 text-center overflow-x-auto relative group shadow-sm"
-                    >
-                      <div className="absolute top-2 left-3 flex items-center gap-1 text-[9px] text-[#2563EB] font-bold uppercase select-none font-mono">
-                        <Sigma className="w-3 h-3 text-[#2563EB]" /> Formula
-                      </div>
-                      <span className="font-serif text-lg font-normal tracking-wide text-[#FAFAFA]">
-                        {formula}
-                      </span>
-                    </div>
-                  );
-                }
-
-                const boldParts = subPart.split(/(\*\*.*?\*\*)/g);
-                return (
-                  <p key={sIdx} className="leading-relaxed">
-                    {boldParts.map((bPart, bIdx) => {
-                      if (bPart.startsWith('**') && bPart.endsWith('**')) {
-                        return (
-                          <strong key={bIdx} className="font-semibold text-[#FAFAFA]">
-                            {bPart.substring(2, bPart.length - 2)}
-                          </strong>
-                        );
-                      }
-
-                      const citationParts = bPart.split(/(\[\d+\])/g);
-                      return (
-                        <React.Fragment key={bIdx}>
-                          {citationParts.map((cPart, cIdx) => {
-                            if (cPart.startsWith('[') && cPart.endsWith(']')) {
-                              const num = cPart.substring(1, cPart.length - 1);
-                              return (
-                                <sup 
-                                  key={cIdx} 
-                                  className="text-[10px] font-semibold text-[#2563EB] bg-[#2563EB]/15 border border-[#2563EB]/30 px-1 rounded mx-0.5 select-none cursor-pointer"
-                                  onClick={() => {
-                                    toast.info(`Citation [${num}] references source card`);
-                                  }}
-                                >
-                                  {num}
-                                </sup>
-                              );
-                            }
-                            return cPart;
-                          })}
-                        </React.Fragment>
-                      );
-                    })}
-                  </p>
-                );
-              })}
-            </div>
+            <p key={j} className="leading-relaxed text-[13px] font-sans" style={{ color: 'var(--fg-2)' }}>
+              {parts.map((p, k) =>
+                p.startsWith('**') && p.endsWith('**') ? (
+                  <strong key={k} style={{ color: 'var(--fg)', fontWeight: 600 }}>
+                    {p.slice(2, -2)}
+                  </strong>
+                ) : (
+                  p
+                )
+              )}
+            </p>
           );
         })}
       </div>
     );
+  });
+}
+
+/* ─── Suggestion chips ─────────────────────────────────────────────── */
+const SUGGESTIONS = [
+  {
+    id: 'quicksort',
+    title: 'Analyze Quicksort',
+    query: 'Analyze the mathematical complexity bounds of Quicksort and show a code example.',
+    icon: Terminal,
+  },
+  {
+    id: 'svm',
+    title: 'Derive SVM Margins',
+    query: 'Explain Support Vector Machines and derive the primal optimization formula.',
+    icon: Sigma,
+  },
+  {
+    id: 'k-maps',
+    title: 'Simplify K-Maps',
+    query: 'What are the rules to simplify logic using Karnaugh Maps? Include an example.',
+    icon: BookOpen,
+  },
+];
+
+const MOCK_RESPONSES = {
+  quicksort: `**Quicksort Complexity Analysis**\n\nQuicksort is a divide-and-conquer sorting algorithm with the following complexity bounds:\n\n- **Best case**: O(n log n) — pivot splits array evenly each time\n- **Average case**: O(n log n) — expected with random pivot selection\n- **Worst case**: O(n²) — pivot always picks smallest/largest element\n\n\`\`\`python\ndef quicksort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left   = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right  = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\`\`\``,
+  svm: `**Support Vector Machines — Margin Derivation**\n\nSVMs find a hyperplane that maximises the margin between two classes.\n\nThe primal optimisation problem is:\n\n**Minimise** ½ ‖w‖² subject to yᵢ(w·xᵢ + b) ≥ 1 for all i\n\nThe geometric margin for a correctly classified point is defined as:\n\n**margin = 2 / ‖w‖**\n\nMaximising the margin is equivalent to minimising ‖w‖, which leads to a convex quadratic optimisation problem solvable via Lagrange multipliers.`,
+  'k-maps': `**Karnaugh Map Simplification Rules**\n\nK-Maps are a visual method to simplify Boolean expressions.\n\n**Rules:**\n1. Group 1s in powers of 2 — groups of 1, 2, 4, 8…\n2. Groups must be rectangular and wrap around edges\n3. Larger groups → fewer terms in simplified expression\n4. Each 1 must be covered by at least one group\n\n**Example:** F(A,B) = A'B + AB = B\n\nBoth minterms share B=1, so B alone covers the function.`,
+};
+
+/* ─── Main component ───────────────────────────────────────────────── */
+export function AiChatWindow() {
+  const toast = useToast();
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [streamingId, setStreamingId] = useState(null);
+  const [streamingText, setStreamingText] = useState('');
+  const [copiedId, setCopiedId] = useState(null);
+  const [webMode, setWebMode] = useState(true);
+  const bottomRef = useRef(null);
+  const textareaRef = useRef(null);
+
+  // Scroll to bottom whenever messages or streaming text changes
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingText]);
+
+  const streamResponse = useCallback((text, id) => {
+    setStreamingId(id);
+    setStreamingText('');
+    let i = 0;
+    const speed = 12; // ms per char
+    const tick = () => {
+      i += 3;
+      if (i >= text.length) {
+        setStreamingText(text);
+        setStreamingId(null);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === id ? { ...m, text, isStreaming: false } : m))
+        );
+        return;
+      }
+      setStreamingText(text.slice(0, i));
+      setTimeout(tick, speed);
+    };
+    setTimeout(tick, speed);
+  }, []);
+
+  const handleSubmit = useCallback(
+    async (e) => {
+      e?.preventDefault();
+      const q = input.trim();
+      if (!q || streamingId !== null) return;
+
+      const uid = Date.now();
+      const aid = uid + 1;
+      setInput('');
+      textareaRef.current?.focus();
+
+      setMessages((prev) => [
+        ...prev,
+        { id: uid, sender: 'user', text: q },
+        { id: aid, sender: 'ai', text: '', isStreaming: true, sources: [] },
+      ]);
+
+      // Pick mock response based on keyword
+      const key = Object.keys(MOCK_RESPONSES).find((k) =>
+        q.toLowerCase().includes(k.replace('-', ''))
+      );
+      const responseText =
+        MOCK_RESPONSES[key] ??
+        `I received your query: **"${q}"**\n\nPlease connect a backend service or upload course materials to begin indexed retrieval.`;
+
+      streamResponse(responseText, aid);
+    },
+    [input, streamingId, streamResponse]
+  );
+
+  const handleSuggestion = (query) => {
+    setInput(query);
+    textareaRef.current?.focus();
   };
 
-  return (
-    <div className="w-full h-full flex flex-col min-h-0 font-sans relative">
-      
-      {messages.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center p-4 sm:p-6 gap-5 overflow-y-auto">
-          <div className="flex flex-col items-center gap-2.5">
-            <div
-              className="w-11 h-11 rounded-lg flex items-center justify-center font-serif text-xl shadow-sm"
-              style={{ background: 'var(--fg)', color: 'var(--bg)' }}
-            >
-              A
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-serif font-normal tracking-tight" style={{ color: 'var(--fg)' }}>
-              Where knowledge begins.
-            </h2>
-            <p className="max-w-xs sm:max-w-md text-xs font-sans leading-relaxed" style={{ color: 'var(--fg-3)' }}>
-              Search complexity bounds, SVM math primals, and K-Map logic. Optimized for study references.
-            </p>
-          </div>
+  const handleCopy = (id, text) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    toast.success('Copied to clipboard.');
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
-          <div 
-            className="w-full max-w-2xl mt-2 grid gap-3"
-            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}
-          >
-            {suggestions.map((s) => {
-              const Icon = s.icon;
-              return (
-                <div 
-                  key={s.id} 
-                  onClick={() => handleSuggestionClick(s.query)}
-                  className="flex flex-col text-left p-3.5 rounded-lg cursor-pointer transition-all duration-150 hover:border-[var(--accent)] group"
-                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+  const handleRegenerate = (id) => {
+    const msg = messages.find((m) => m.id === id);
+    if (!msg) return;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, text: '', isStreaming: true } : m))
+    );
+    toast.info('Regenerating response…');
+    setTimeout(() => streamResponse(msg.text || 'Regenerated response.', id), 300);
+  };
+
+  const isEmpty = messages.length === 0;
+
+  return (
+    <div className="flex flex-col w-full h-full min-h-0 overflow-hidden" style={{ fontFamily: 'var(--font-sans)' }}>
+
+      {/* ── Message Area ─────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {isEmpty ? (
+          /* Empty / Welcome */
+          <div className="flex flex-col items-center justify-center h-full px-4 py-8 text-center gap-6">
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center font-serif text-xl flex-shrink-0"
+                style={{ background: 'var(--fg)', color: 'var(--bg)' }}
+              >
+                A
+              </div>
+              <div>
+                <h2
+                  className="text-xl font-semibold tracking-tight font-sans"
+                  style={{ color: 'var(--fg)' }}
                 >
-                  <div className="p-1.5 rounded-md w-7 h-7 flex items-center justify-center mb-2.5 transition-colors" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
-                    <Icon className="w-3.5 h-3.5" />
+                  AI Copilot
+                </h2>
+                <p className="text-xs mt-1 max-w-[260px]" style={{ color: 'var(--fg-3)' }}>
+                  Ask anything about your course materials
+                </p>
+              </div>
+            </div>
+
+            {/* Suggestion chips */}
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              {SUGGESTIONS.map((s) => {
+                const Icon = s.icon;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => handleSuggestion(s.query)}
+                    className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left cursor-pointer transition-all w-full"
+                    style={{
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border-hover)';
+                      e.currentTarget.style.background = 'var(--bg-hover)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.background = 'var(--bg-surface)';
+                    }}
+                  >
+                    <div
+                      className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                      style={{ background: 'var(--bg-subtle)', color: 'var(--accent)' }}
+                    >
+                      <Icon className="w-3 h-3" />
+                    </div>
+                    <span className="text-xs font-medium font-sans" style={{ color: 'var(--fg-2)' }}>
+                      {s.title}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          /* Conversation */
+          <div className="flex flex-col divide-y" style={{ borderColor: 'var(--border)' }}>
+            {messages.map((msg) => {
+              const isAi = msg.sender === 'ai';
+              const isCurrent = isAi && streamingId === msg.id;
+              const displayText = isCurrent ? streamingText : msg.text;
+
+              return (
+                <div key={msg.id} className="px-4 py-4 flex flex-col gap-3">
+                  {/* Avatar + sender label */}
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                      style={{
+                        background: isAi ? 'var(--accent-dim)' : 'var(--bg-subtle)',
+                        border: `1px solid ${isAi ? 'var(--accent)' : 'var(--border)'}`,
+                        color: isAi ? 'var(--accent)' : 'var(--fg-3)',
+                      }}
+                    >
+                      {isAi ? <Sparkles className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                    </div>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>
+                      {isAi ? 'AI Copilot' : 'You'}
+                    </span>
                   </div>
-                  <h4 className="font-semibold text-xs leading-snug font-sans group-hover:text-[var(--accent)]" style={{ color: 'var(--fg)' }}>
-                    {s.title}
-                  </h4>
-                  <p className="mt-1 text-[11px] leading-relaxed font-sans line-clamp-2" style={{ color: 'var(--fg-3)' }}>
-                    {s.query}
-                  </p>
+
+                  {/* Message content */}
+                  <div className="pl-8">
+                    {isCurrent ? (
+                      <div>
+                        {renderAiContent(displayText)}
+                        <span
+                          className="inline-block w-[2px] h-4 ml-0.5 align-middle animate-pulse"
+                          style={{ background: 'var(--accent)' }}
+                        />
+                      </div>
+                    ) : msg.isStreaming && !isCurrent ? (
+                      <div className="flex items-center gap-2" style={{ color: 'var(--fg-3)' }}>
+                        <Loader variant="dots" size="sm" color="accent" />
+                        <span className="text-xs">Thinking…</span>
+                      </div>
+                    ) : isAi ? (
+                      renderAiContent(displayText)
+                    ) : (
+                      <p className="text-sm leading-relaxed" style={{ color: 'var(--fg)' }}>
+                        {msg.text}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* AI action bar */}
+                  {isAi && !msg.isStreaming && !isCurrent && (
+                    <div className="pl-8 flex items-center gap-1 mt-1">
+                      <button
+                        onClick={() => handleCopy(msg.id, msg.text)}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] cursor-pointer transition-colors"
+                        style={{ color: 'var(--fg-3)' }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = 'var(--fg)';
+                          e.currentTarget.style.background = 'var(--bg-subtle)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = 'var(--fg-3)';
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        {copiedId === msg.id ? (
+                          <Check className="w-3 h-3" style={{ color: 'var(--success)' }} />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                        {copiedId === msg.id ? 'Copied' : 'Copy'}
+                      </button>
+                      <button
+                        onClick={() => handleRegenerate(msg.id)}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] cursor-pointer transition-colors"
+                        style={{ color: 'var(--fg-3)' }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = 'var(--fg)';
+                          e.currentTarget.style.background = 'var(--bg-subtle)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = 'var(--fg-3)';
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Retry
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
+            <div ref={bottomRef} className="h-2" />
           </div>
-        </div>
-      ) : (
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 rounded-lg border min-h-0" style={{ background: 'var(--bg-subtle)', borderColor: 'var(--border)' }}>
-          {messages.map((msg) => {
-            const isAi = msg.sender === 'ai';
-            const isCurrentStreaming = isAi && streamingIndex === msg.id;
-            const currentText = isCurrentStreaming ? streamingText : msg.text;
+        )}
+      </div>
 
-            return (
-              <div 
-                key={msg.id} 
-                className="flex flex-col gap-2.5 py-4 border-b last:border-0"
-                style={{ borderColor: 'var(--border)' }}
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center border text-xs" style={{ background: isAi ? 'var(--accent-dim)' : 'var(--bg-surface)', borderColor: isAi ? 'var(--accent)' : 'var(--border)', color: isAi ? 'var(--accent)' : 'var(--fg-3)' }}>
-                    {isAi ? <Sparkles className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
-                  </div>
-                  <span className="text-xs font-semibold" style={{ color: 'var(--fg)' }}>
-                    {isAi ? 'AI Assistant' : 'You'}
-                  </span>
-                </div>
-
-                {isAi && msg.sources && msg.sources.length > 0 && (
-                  <div className="pl-8 flex flex-col gap-2 mt-1">
-                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider select-none font-sans" style={{ color: 'var(--fg-3)' }}>
-                      <Globe className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} /> Core Sources
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {msg.sources.map((src) => (
-                        <a
-                          key={src.id}
-                          href={src.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="p-2 border rounded-md flex items-start gap-1.5 transition-colors cursor-pointer min-w-0"
-                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-                        >
-                          <span className="text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded flex-shrink-0 mt-0.5 font-mono" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
-                            {src.id}
-                          </span>
-                          <div className="min-w-0 font-sans">
-                            <p className="text-[10px] font-semibold truncate leading-snug" style={{ color: 'var(--fg)' }}>
-                              {src.title}
-                            </p>
-                            <p className="text-[9px] truncate mt-0.5" style={{ color: 'var(--fg-3)' }}>
-                              {src.site}
-                            </p>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="pl-8 pr-2 min-h-[24px] relative">
-                  {isCurrentStreaming ? (
-                    <>
-                      {renderMessageContent(currentText, isAi)}
-                      <span className="inline-block w-1.5 h-4 animate-pulse ml-0.5" style={{ background: 'var(--accent)' }} />
-                    </>
-                  ) : msg.isStreaming && !isCurrentStreaming ? (
-                    <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--fg-3)' }}>
-                      <Loader variant="spinner" size="sm" />
-                      <span>Synthesizing database sources...</span>
-                    </div>
-                  ) : (
-                    renderMessageContent(msg.text, isAi)
-                  )}
-                </div>
-
-                {isAi && !msg.isStreaming && !isCurrentStreaming && (
-                  <div className="pl-8 flex items-center gap-2 mt-1">
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => handleCopyToClipboard(msg.id, msg.text)}
-                      iconLeft={copiedId === msg.id ? Check : Copy}
-                      className="text-xs h-7"
-                      style={{ color: 'var(--fg-3)' }}
-                    >
-                      {copiedId === msg.id ? 'Copied' : 'Copy'}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => handleRegenerate(msg.id)}
-                      iconLeft={RotateCcw}
-                      className="text-xs h-7"
-                      style={{ color: 'var(--fg-3)' }}
-                    >
-                      Regenerate
-                    </Button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          <div ref={messagesEndRef} />
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="mt-3 border shadow-sm rounded-lg p-2 flex flex-wrap items-center gap-2 shrink-0 relative" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-        <button
-          type="button"
-          onClick={() => setIsCopilot(!isCopilot)}
-          className="h-8 px-2.5 rounded-md border font-sans text-[11px] font-semibold flex items-center gap-1.5 transition-all select-none cursor-pointer shrink-0"
+      {/* ── Input Bar ────────────────────────────────────────────── */}
+      <div
+        className="flex-shrink-0 px-3 py-2.5"
+        style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-surface)' }}
+      >
+        <form
+          onSubmit={handleSubmit}
+          className="flex items-end gap-2 rounded-lg px-3 py-2"
           style={{
-            background: isCopilot ? 'var(--accent-dim)' : 'var(--bg-subtle)',
-            borderColor: isCopilot ? 'var(--accent)' : 'var(--border)',
-            color: isCopilot ? 'var(--accent)' : 'var(--fg-3)',
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border)',
           }}
-          aria-label="Toggle search engine mode"
         >
-          <Globe className="w-3.5 h-3.5" />
-          <span className="hidden xs:inline">{isCopilot ? 'Web Copilot' : 'Normal Search'}</span>
-        </button>
+          {/* Web mode toggle */}
+          <button
+            type="button"
+            onClick={() => setWebMode((v) => !v)}
+            className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-md transition-all cursor-pointer"
+            style={{
+              background: webMode ? 'var(--accent-dim)' : 'transparent',
+              color: webMode ? 'var(--accent)' : 'var(--fg-3)',
+              border: `1px solid ${webMode ? 'var(--accent)' : 'var(--border)'}`,
+            }}
+            title={webMode ? 'Web Copilot on' : 'Web Copilot off'}
+          >
+            <Globe className="w-3.5 h-3.5" />
+          </button>
 
-        <textarea
-          rows="1"
-          placeholder="Ask a question..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="flex-1 min-w-[120px] bg-transparent border-0 outline-none font-sans text-xs sm:text-sm py-1 resize-none max-h-12"
-          style={{ color: 'var(--fg)' }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSubmit(e);
-            }
-          }}
-        />
+          {/* Textarea */}
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              // Auto-grow: reset, then set to scrollHeight (max 4 lines ≈ 96px)
+              e.target.style.height = 'auto';
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 96)}px`;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
+            placeholder="Ask about your course…"
+            className="flex-1 bg-transparent outline-none resize-none font-sans text-[13px] leading-relaxed py-0.5 min-w-0"
+            style={{
+              color: 'var(--fg)',
+              maxHeight: '96px',
+              overflowY: 'auto',
+            }}
+          />
 
-        <div className="flex items-center gap-1 shrink-0 ml-auto">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-8 h-8 p-0 rounded-md cursor-pointer"
-            style={{ color: 'var(--fg-3)' }}
-            iconLeft={Paperclip}
-            onClick={() => toast.info('Attaching document file...')}
-            aria-label="Attach file"
-          />
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            disabled={!input.trim() || streamingIndex !== null}
-            className="w-8 h-8 p-0 rounded-md cursor-pointer"
-            style={{ background: 'var(--accent)', color: '#FFFFFF' }}
-            iconLeft={Send}
-            aria-label="Send message"
-          />
-        </div>
-      </form>
+          {/* Attach + Send */}
+          <div className="flex-shrink-0 flex items-center gap-1 self-end pb-0.5">
+            <button
+              type="button"
+              onClick={() => toast.info('File attach coming soon.')}
+              className="w-7 h-7 flex items-center justify-center rounded-md transition-colors cursor-pointer"
+              style={{ color: 'var(--fg-3)' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'var(--fg)';
+                e.currentTarget.style.background = 'var(--bg-hover)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--fg-3)';
+                e.currentTarget.style.background = 'transparent';
+              }}
+              aria-label="Attach file"
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="submit"
+              disabled={!input.trim() || streamingId !== null}
+              className="w-7 h-7 flex items-center justify-center rounded-md transition-all cursor-pointer disabled:opacity-30"
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+              aria-label="Send"
+            >
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </form>
+
+        <p className="text-center text-[10px] mt-1.5" style={{ color: 'var(--fg-3)' }}>
+          AI may make mistakes — verify with your course materials
+        </p>
+      </div>
     </div>
   );
 }
