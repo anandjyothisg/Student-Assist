@@ -1,0 +1,200 @@
+# ==============================================================================
+# SmartStudent AI — .gitignore
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Python
+# ------------------------------------------------------------------------------
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+wheels/
+share/python-wheels/
+*.pyo
+*.pyd
+
+# ------------------------------------------------------------------------------
+# Django
+# ------------------------------------------------------------------------------
+
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+/server/media/
+/server/static/
+/server/logs/
+/server/chroma_db/
+
+# Migrations (keep __init__.py, ignore generated files in team workflows if needed)
+# Uncomment the next line if you prefer not to commit migrations:
+# **/migrations/0*.py
+
+# ------------------------------------------------------------------------------
+# Environment / Secrets
+# ------------------------------------------------------------------------------
+
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ------------------------------------------------------------------------------
+# Virtual Environment
+# ------------------------------------------------------------------------------
+
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+.python-version
+
+# ------------------------------------------------------------------------------
+# Node / Frontend
+# ------------------------------------------------------------------------------
+
+node_modules/
+/client/dist/
+/client/build/
+/client/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.yarn-integrity
+.pnp.*
+.pnp.js
+
+# ------------------------------------------------------------------------------
+# Docker
+# ------------------------------------------------------------------------------
+
+.docker/
+docker-compose.override.yml
+
+# ------------------------------------------------------------------------------
+# Testing
+# ------------------------------------------------------------------------------
+
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+coverage.xml
+*.cover
+*.py,cover
+nosetests.xml
+
+# ------------------------------------------------------------------------------
+# IDE / Editor
+# ------------------------------------------------------------------------------
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains (PyCharm, WebStorm, etc.)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ------------------------------------------------------------------------------
+# Celery
+# ------------------------------------------------------------------------------
+
+celerybeat-schedule
+celerybeat.pid
+celeryd.pid
+
+# ------------------------------------------------------------------------------
+# ChromaDB
+# ------------------------------------------------------------------------------
+
+/server/chroma_db/
+
+# ------------------------------------------------------------------------------
+# MinIO / Object Storage
+# ------------------------------------------------------------------------------
+
+.minio/
+
+# ------------------------------------------------------------------------------
+# Misc
+# ------------------------------------------------------------------------------
+
+*.bak
+*.tmp
+*.temp
+*.orig
+.cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.hypothesis/
+instance/
+.webassets-cache
+profile_default/
+ipython_config.py

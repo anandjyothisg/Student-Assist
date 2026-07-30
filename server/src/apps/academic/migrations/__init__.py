@@ -1,0 +1,1 @@
+# apps.academic migrations package

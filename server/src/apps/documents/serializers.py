@@ -1,0 +1,254 @@
+"""
+SmartStudent AI — Document Serializers
+"""
+
+from django.db import models, transaction
+from django.db.models import Max
+from rest_framework import serializers
+
+from apps.academic.serializers import CourseListSerializer
+from apps.accounts.serializers import UserPublicSerializer
+from apps.documents.models import Document, DocumentChunk, DocumentType, ProcessingJob
+
+
+class ProcessingJobSerializer(serializers.ModelSerializer):
+    duration_seconds = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = ProcessingJob
+        fields = (
+            "status",
+            "celery_task_id",
+            "started_at",
+            "completed_at",
+            "duration_seconds",
+            "error_details",
+        )
+        read_only_fields = fields
+
+
+class DocumentChunkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentChunk
+        fields = (
+            "id",
+            "chunk_index",
+            "content",
+            "page_number",
+            "chroma_id",
+            "metadata",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
+class DocumentVersionHistorySerializer(serializers.ModelSerializer):
+    """Compact serializer to represent document history versions."""
+
+    uploaded_by_name = serializers.SerializerMethodField()
+    file_size_mb = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = Document
+        fields = (
+            "id",
+            "title",
+            "version",
+            "is_latest",
+            "file",
+            "file_type",
+            "file_size_mb",
+            "uploaded_by_name",
+            "processing_status",
+            "created_at",
+        )
+        read_only_fields = fields
+
+    def get_uploaded_by_name(self, obj: Document) -> str | None:
+        return obj.uploaded_by.get_full_name() if obj.uploaded_by else None
+
+
+class DocumentListSerializer(serializers.ModelSerializer):
+    """Compact serializer for document list views."""
+
+    course_code = serializers.CharField(source="course.code", read_only=True)
+    uploaded_by_name = serializers.SerializerMethodField()
+    file_size_mb = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = Document
+        fields = (
+            "id",
+            "title",
+            "file_type",
+            "file_size_mb",
+            "course_code",
+            "uploaded_by_name",
+            "processing_status",
+            "page_count",
+            "chunk_count",
+            "version",
+            "is_latest",
+            "parent",
+            "created_at",
+        )
+        read_only_fields = fields
+
+    def get_uploaded_by_name(self, obj: Document) -> str | None:
+        return obj.uploaded_by.get_full_name() if obj.uploaded_by else None
+
+
+class DocumentDetailSerializer(serializers.ModelSerializer):
+    """Full document detail with nested objects and history."""
+
+    course = CourseListSerializer(read_only=True)
+    uploaded_by = UserPublicSerializer(read_only=True)
+    processing_job = ProcessingJobSerializer(read_only=True)
+    file_size_mb = serializers.FloatField(read_only=True)
+    versions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Document
+        fields = (
+            "id",
+            "title",
+            "description",
+            "file",
+            "file_type",
+            "file_size",
+            "file_size_mb",
+            "file_hash",
+            "course",
+            "uploaded_by",
+            "processing_status",
+            "page_count",
+            "chunk_count",
+            "error_message",
+            "processing_job",
+            "version",
+            "is_latest",
+            "parent",
+            "metadata",
+            "versions",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "file_hash",
+            "file_size",
+            "page_count",
+            "chunk_count",
+            "processing_status",
+            "error_message",
+            "version",
+            "is_latest",
+            "parent",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_versions(self, obj: Document):
+        # The root parent is either obj.parent or obj (if obj is the root and has versions)
+        root = obj.parent if obj.parent else obj
+        # Query other versions in this family, excluding the current instance
+        qs = Document.objects.filter(
+            models.Q(id=root.id) | models.Q(parent=root)
+        ).exclude(id=obj.id).order_by("-version")
+        return DocumentVersionHistorySerializer(qs, many=True, context=self.context).data
+
+
+class DocumentUploadSerializer(serializers.ModelSerializer):
+    """Handles document upload from teacher/admin with optional versioning and metadata."""
+
+    parent = serializers.PrimaryKeyRelatedField(
+        queryset=Document.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True,
+        help_text="Provide to upload a new version of an existing document.",
+    )
+    metadata = serializers.JSONField(
+        required=False,
+        help_text="Optional custom metadata (key-value tags) to store with the document.",
+    )
+
+    class Meta:
+        model = Document
+        fields = ("title", "description", "file", "course", "parent", "metadata")
+
+    def validate_file(self, file):
+        from apps.core.utils import get_file_extension, validate_file_size
+
+        validate_file_size(file)
+        ext = get_file_extension(file.name)
+
+        ext_to_type = {
+            ".pdf": DocumentType.PDF,
+            ".docx": DocumentType.DOCX,
+            ".pptx": DocumentType.PPTX,
+            ".txt": DocumentType.TXT,
+        }
+        if ext not in ext_to_type:
+            from apps.core.exceptions import UnsupportedFileTypeError
+            raise serializers.ValidationError(
+                f"Unsupported file type '{ext}'. Allowed: {', '.join(ext_to_type.keys())}"
+            )
+
+        # Attach the detected type so create() can use it
+        self._detected_file_type = ext_to_type[ext]
+        return file
+
+    def validate(self, attrs: dict) -> dict:
+        parent = attrs.get("parent")
+        course = attrs.get("course")
+
+        if parent:
+            if parent.course != course:
+                raise serializers.ValidationError(
+                    {"parent": "The parent document must belong to the same course."}
+                )
+            # Ensure parent is the absolute root parent to keep version history flat
+            if parent.parent:
+                attrs["parent"] = parent.parent
+        return attrs
+
+    def create(self, validated_data: dict) -> Document:
+        from apps.core.utils import compute_file_hash
+
+        file = validated_data["file"]
+        file_hash = compute_file_hash(file)
+        file_size = file.size
+
+        parent = validated_data.get("parent")
+        metadata_val = validated_data.get("metadata", {})
+
+        with transaction.atomic():
+            if parent:
+                # Find current maximum version in this document family
+                max_version = Document.objects.filter(
+                    models.Q(id=parent.id) | models.Q(parent=parent)
+                ).aggregate(Max("version"))["version__max"] or 1
+                new_version = max_version + 1
+
+                # Demote all existing versions in this family to is_latest=False
+                Document.objects.filter(
+                    models.Q(id=parent.id) | models.Q(parent=parent)
+                ).update(is_latest=False)
+
+                # Set versioning fields on the new document
+                validated_data["parent"] = parent
+                validated_data["version"] = new_version
+                validated_data["is_latest"] = True
+            else:
+                validated_data["version"] = 1
+                validated_data["is_latest"] = True
+
+            validated_data["metadata"] = metadata_val
+
+            return Document.objects.create(
+                **validated_data,
+                file_type=self._detected_file_type,
+                file_hash=file_hash,
+                file_size=file_size,
+            )
