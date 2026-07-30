@@ -24,7 +24,7 @@ export function MobileNav({ activeTab, setActiveTab, user, onLogout }) {
         }}
         aria-label="Mobile navigation"
       >
-        <div className="flex items-center justify-around h-14 px-2 safe-area-inset-bottom">
+        <div className="flex items-center justify-around h-14 px-2" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           {items.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.tab;

@@ -9,51 +9,57 @@ export function Badge({
   className = '',
   ...props
 }) {
-  const base = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium font-sans tracking-wide select-none transition-colors duration-150';
+  const base = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium font-sans tracking-wide select-none';
 
-  const palette = {
+  // Use CSS variables for theming — these adapt to dark/light mode automatically
+  const styles = {
     solid: {
-      neutral: 'bg-[#18181B] text-[#FAFAFA]',
-      accent:  'bg-[#2563EB] text-white',
-      success: 'bg-[#10B981] text-white',
-      warning: 'bg-[#F59E0B] text-white',
-      error:   'bg-[#EF4444] text-white',
-      info:    'bg-[#2563EB] text-white',
-      primary: 'bg-[#2563EB] text-white',
+      neutral: { background: 'var(--bg-hover)',    color: 'var(--fg)',    border: '1px solid var(--border)' },
+      accent:  { background: 'var(--accent)',       color: 'var(--accent-fg)', border: '1px solid var(--accent)' },
+      success: { background: 'var(--success)',      color: '#fff',        border: '1px solid var(--success)' },
+      warning: { background: 'var(--warning)',      color: '#fff',        border: '1px solid var(--warning)' },
+      error:   { background: 'var(--error)',        color: '#fff',        border: '1px solid var(--error)' },
+      info:    { background: 'var(--accent)',       color: 'var(--accent-fg)', border: '1px solid var(--accent)' },
+      primary: { background: 'var(--fg)',           color: 'var(--bg)',   border: '1px solid var(--fg)' },
     },
     subtle: {
-      neutral: 'bg-[#18181B] text-[#A1A1AA] border border-white/[0.05]',
-      accent:  'bg-[#2563EB]/15 text-[#60A5FA] border border-[#2563EB]/30',
-      success: 'bg-[#10B981]/15 text-[#34D399] border border-[#10B981]/30',
-      warning: 'bg-[#F59E0B]/15 text-[#FBBF24] border border-[#F59E0B]/30',
-      error:   'bg-[#EF4444]/15 text-[#F87171] border border-[#EF4444]/30',
-      info:    'bg-[#2563EB]/15 text-[#60A5FA] border border-[#2563EB]/30',
-      primary: 'bg-[#2563EB]/15 text-[#60A5FA] border border-[#2563EB]/30',
+      neutral: { background: 'var(--bg-subtle)',   color: 'var(--fg-2)', border: '1px solid var(--border)' },
+      accent:  { background: 'var(--accent-dim)',  color: 'var(--accent)', border: '1px solid var(--accent)' },
+      success: { background: 'var(--success-dim)', color: 'var(--success)', border: '1px solid var(--success)' },
+      warning: { background: 'var(--warning-dim)', color: 'var(--warning)', border: '1px solid var(--warning)' },
+      error:   { background: 'var(--error-dim)',   color: 'var(--error)',  border: '1px solid var(--error)' },
+      info:    { background: 'var(--accent-dim)',  color: 'var(--accent)', border: '1px solid var(--accent)' },
+      primary: { background: 'var(--bg-subtle)',   color: 'var(--fg)',   border: '1px solid var(--border-hover)' },
     },
     outline: {
-      neutral: 'bg-transparent text-[#A1A1AA] border border-white/10',
-      accent:  'bg-transparent text-[#60A5FA] border border-[#2563EB]/30',
-      success: 'bg-transparent text-[#34D399] border border-[#10B981]/30',
-      warning: 'bg-transparent text-[#FBBF24] border border-[#F59E0B]/30',
-      error:   'bg-transparent text-[#F87171] border border-[#EF4444]/30',
-      info:    'bg-transparent text-[#60A5FA] border border-[#2563EB]/30',
-      primary: 'bg-transparent text-[#60A5FA] border border-[#2563EB]/30',
+      neutral: { background: 'transparent', color: 'var(--fg-2)',   border: '1px solid var(--border)' },
+      accent:  { background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)' },
+      success: { background: 'transparent', color: 'var(--success)', border: '1px solid var(--success)' },
+      warning: { background: 'transparent', color: 'var(--warning)', border: '1px solid var(--warning)' },
+      error:   { background: 'transparent', color: 'var(--error)',  border: '1px solid var(--error)' },
+      info:    { background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)' },
+      primary: { background: 'transparent', color: 'var(--fg)',     border: '1px solid var(--border-hover)' },
     },
   };
 
-  const variantClasses = (palette[variant] ?? palette.subtle)[color] ?? palette.subtle.neutral;
+  const styleObj = (styles[variant] ?? styles.subtle)[color] ?? styles.subtle.neutral;
+
+  const dotColors = {
+    success: 'var(--success)',
+    warning: 'var(--warning)',
+    error:   'var(--error)',
+    accent:  'var(--accent)',
+    info:    'var(--accent)',
+    primary: 'var(--fg)',
+    neutral: 'var(--fg-3)',
+  };
 
   return (
-    <span className={`${base} ${variantClasses} ${className}`} {...props}>
+    <span className={`${base} ${className}`} style={styleObj} {...props}>
       {dot && (
         <span
-          className={[
-            'w-1.5 h-1.5 rounded-full flex-shrink-0',
-            color === 'success' ? 'bg-[#10B981]' :
-            color === 'warning' ? 'bg-[#F59E0B]' :
-            color === 'error'   ? 'bg-[#EF4444]' :
-            'bg-[#2563EB]',
-          ].join(' ')}
+          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          style={{ background: dotColors[color] ?? dotColors.neutral }}
         />
       )}
       {Icon && <Icon className="w-3 h-3 flex-shrink-0" />}

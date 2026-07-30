@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 
 /**
@@ -25,9 +25,9 @@ export function Loader({
   };
 
   const colors = {
-    accent: { stroke: 'text-[#6E56CF]',  dot: 'bg-[#6E56CF]'  },
-    muted:  { stroke: 'text-fg-muted',   dot: 'bg-fg-muted'   },
-    white:  { stroke: 'text-white',      dot: 'bg-white'      },
+    accent: { stroke: 'text-[var(--accent)]',  dotStyle: { background: 'var(--accent)' }  },
+    muted:  { stroke: 'text-[var(--fg-3)]',    dotStyle: { background: 'var(--fg-3)' }   },
+    white:  { stroke: 'text-white',            dotStyle: { background: '#fff' }           },
   };
 
   const sz  = sizes[size]  ?? sizes.md;
@@ -46,7 +46,8 @@ export function Loader({
             key={i}
             animate={{ opacity: [0.2, 1, 0.2] }}
             transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.2 }}
-            className={`rounded-full ${sz.dot} ${col.dot}`}
+            className={`rounded-full ${sz.dot}`}
+            style={col.dotStyle}
           />
         ))}
       </div>
@@ -64,7 +65,8 @@ export function Loader({
         <motion.span
           animate={{ opacity: [0.3, 0.9, 0.3] }}
           transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-          className={`rounded-full w-full h-full ${col.dot}`}
+          className={`rounded-full w-full h-full`}
+          style={col.dotStyle}
         />
       </div>
     );

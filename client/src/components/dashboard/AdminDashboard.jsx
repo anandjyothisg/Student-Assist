@@ -117,7 +117,7 @@ export function AdminDashboard({ setActiveTab }) {
                 className="w-10 h-10 rounded-md flex items-center justify-center flex-shrink-0"
                 style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--fg-2)' }}
               >
-                <Icon className="w-4.5 h-4.5" />
+                <Icon className="w-4 h-4" />
               </div>
             </div>
           );

@@ -1,10 +1,10 @@
-﻿import React from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Tooltip — Blueprint spec:
+ * Tooltip — Design System spec:
  * - Fade only. NO scale. 120ms ease-out.
- * - Dark bg (#09090B) white text, 11px, Inter medium.
+ * - Surface bg with fg text — adapts to light/dark mode.
  * - Triggered on hover + focus (keyboard accessible).
  */
 export function Tooltip({
@@ -50,12 +50,17 @@ export function Tooltip({
             transition={{ duration: 0.12, ease: [0.0, 0, 0.2, 1] }}
             className={[
               'absolute z-50 px-2.5 py-1.5 rounded-md',
-              'bg-[#09090B] dark:bg-[#FAFAFA] text-white dark:text-[#09090B]',
               'text-[11px] font-medium font-sans whitespace-nowrap',
-              'shadow-[var(--shadow-lg)] pointer-events-none select-none',
+              'pointer-events-none select-none',
               positions[position],
               className,
             ].join(' ')}
+            style={{
+              background: 'var(--bg-subtle)',
+              color: 'var(--fg)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow-lg)',
+            }}
           >
             {content}
           </motion.div>

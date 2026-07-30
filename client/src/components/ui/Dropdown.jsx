@@ -72,10 +72,14 @@ export function Dropdown({
             transition={{ duration: 0.15, ease: [0.0, 0, 0.2, 1] }}
             className={[
               'absolute z-50 mt-1.5 min-w-[200px] max-h-60 overflow-y-auto',
-              'rounded-md border border-white/[0.05] bg-[#111113]',
-              'shadow-premium-lg py-1.5 select-none',
+              'rounded-md py-1.5 select-none shadow-premium-lg',
               alignClass,
             ].join(' ')}
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow-premium-lg)',
+            }}
           >
             {items.map((item, idx) => {
               const Icon = item.icon;
@@ -95,15 +99,24 @@ export function Dropdown({
                     'font-sans text-[13px] cursor-pointer select-none',
                     'transition-colors duration-100',
                     item.disabled
-                      ? 'text-[#71717A] opacity-40 cursor-not-allowed pointer-events-none'
-                      : isFocused || isSelected
-                      ? 'bg-[#18181B] text-[#FAFAFA]'
-                      : 'text-[#A1A1AA] hover:bg-[#18181B] hover:text-[#FAFAFA]',
+                      ? 'opacity-40 cursor-not-allowed pointer-events-none'
+                      : '',
                   ].join(' ')}
+                  style={{
+                    color: item.disabled
+                      ? 'var(--fg-3)'
+                      : (isFocused || isSelected) ? 'var(--fg)' : 'var(--fg-2)',
+                    background: (isFocused || isSelected) ? 'var(--bg-hover)' : 'transparent',
+                  }}
                 >
-                  {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0 text-[#71717A]" />}
+                  {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--fg-3)' }} />}
                   <span className="flex-1 font-medium">{item.label}</span>
-                  {isSelected && <Check className="w-3.5 h-3.5 text-[#2563EB] flex-shrink-0" />}
+                  {isSelected && (
+                    <Check
+                      className="w-3.5 h-3.5 flex-shrink-0"
+                      style={{ color: 'var(--accent)' }}
+                    />
+                  )}
                 </li>
               );
             })}
@@ -119,18 +132,31 @@ export function DropdownTrigger({ children, open = false, className = '' }) {
     <button
       type="button"
       className={[
-        'inline-flex items-center gap-2 h-9 px-3.5 rounded-md border border-white/[0.05]',
-        'bg-[#111113] text-[#A1A1AA] text-[13px] font-medium font-sans',
-        'hover:border-white/20 hover:text-[#FAFAFA]',
+        'inline-flex items-center gap-2 h-9 px-3.5 rounded-md',
+        'text-[13px] font-medium font-sans',
         'transition-colors duration-150 cursor-pointer',
         className,
       ].join(' ')}
+      style={{
+        border: '1px solid var(--border)',
+        background: 'var(--bg-surface)',
+        color: 'var(--fg-2)',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'var(--border-hover)';
+        e.currentTarget.style.color = 'var(--fg)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'var(--border)';
+        e.currentTarget.style.color = 'var(--fg-2)';
+      }}
       aria-haspopup="listbox"
       aria-expanded={open}
     >
       {children}
       <ChevronDown
         className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+        style={{ color: 'var(--fg-3)' }}
       />
     </button>
   );

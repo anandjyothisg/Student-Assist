@@ -330,7 +330,7 @@ export function SettingsPanel({ user, onLogout, onUpdateUser }) {
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] mt-0.5 ml-5.5" style={{ color: 'var(--fg-3)' }}>
+                        <p className="text-[11px] mt-0.5 ml-6" style={{ color: 'var(--fg-3)' }}>
                           {session.location} · {session.status}
                         </p>
                       </div>

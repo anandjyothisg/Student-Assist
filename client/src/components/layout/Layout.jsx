@@ -4,6 +4,17 @@ import { MobileNav } from './MobileDrawer';
 import { TopNav } from './TopNav';
 import { CommandPalette } from './CommandPalette';
 
+const TOPNAV_HEIGHT = 48; // px — must match TopNav's actual height
+const MOBILE_NAV_HEIGHT = 56; // px — must match MobileNav's actual height
+
+const FULL_HEIGHT_TABS = new Set([
+  'assistant',
+  'ask',
+  'documents',
+  'sources',
+  'notebook',
+]);
+
 export function AppShell({
   children,
   activeTab,
@@ -19,7 +30,9 @@ export function AppShell({
     const check = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      setSidebarCollapsed(window.innerWidth < 1024);
+      if (window.innerWidth < 1024) {
+        setSidebarCollapsed(true);
+      }
     };
     check();
     window.addEventListener('resize', check);
@@ -37,18 +50,27 @@ export function AppShell({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const isFullHeightTab = ['assistant', 'ask', 'documents', 'sources', 'notebook'].includes(activeTab);
-  const sidebarWidth = isMobile ? 0 : (sidebarCollapsed ? 56 : 220);
+  const isFullHeight = FULL_HEIGHT_TABS.has(activeTab);
+  const sidebarWidth = isMobile ? 0 : sidebarCollapsed ? 56 : 220;
 
   const role = user?.role || 'student';
-  const maxWidthClass = role === 'teacher'
-    ? 'max-w-[1100px]'
-    : role === 'admin'
-    ? 'max-w-[1200px]'
-    : 'max-w-[880px]';
+  const maxWidthClass =
+    role === 'teacher'
+      ? 'max-w-[1100px]'
+      : role === 'admin'
+        ? 'max-w-[1200px]'
+        : 'max-w-[880px]';
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg)', color: 'var(--fg)' }}>
+    // Outer shell: exactly viewport height, no scroll
+    <div
+      className="flex overflow-hidden"
+      style={{
+        height: '100dvh',
+        background: 'var(--bg)',
+        color: 'var(--fg)',
+      }}
+    >
       <CommandPalette
         isOpen={isCommandOpen}
         onClose={() => setIsCommandOpen(false)}
@@ -56,47 +78,79 @@ export function AppShell({
         user={user}
       />
 
-      {/* Desktop sidebar */}
-      <Sidebar
-        isCollapsed={sidebarCollapsed}
-        setIsCollapsed={setSidebarCollapsed}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        user={user}
-        onLogout={onLogout}
-      />
-
-      {/* Mobile bottom nav */}
-      <MobileNav
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        user={user}
-        onLogout={onLogout}
-      />
-
-      {/* Main content area */}
-      <div
-        className="flex flex-col min-h-screen transition-[padding-left] duration-200 ease-out"
-        style={{ paddingLeft: `${sidebarWidth}px` }}
-      >
-        <TopNav
-          onMenuOpen={null}
+      {/* Desktop Sidebar — rendered but hidden via CSS on mobile */}
+      {!isMobile && (
+        <Sidebar
+          isCollapsed={sidebarCollapsed}
+          setIsCollapsed={setSidebarCollapsed}
           activeTab={activeTab}
+          setActiveTab={setActiveTab}
           user={user}
-          onOpenCommandPalette={() => setIsCommandOpen(true)}
+          onLogout={onLogout}
         />
+      )}
 
-        {isFullHeightTab ? (
+      {/* Mobile Bottom Nav */}
+      {isMobile && (
+        <MobileNav
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          user={user}
+          onLogout={onLogout}
+        />
+      )}
+
+      {/* Main column: sits to the right of sidebar */}
+      <div
+        className="flex flex-col flex-1 overflow-hidden"
+        style={{
+          // Sidebar is fixed, so we offset with marginLeft
+          marginLeft: isMobile ? 0 : `${sidebarWidth}px`,
+          transition: 'margin-left 200ms ease-out',
+          height: '100dvh',
+        }}
+      >
+        {/* Top Nav — fixed height, never shrinks */}
+        <div className="flex-shrink-0">
+          <TopNav
+            onMenuOpen={null}
+            activeTab={activeTab}
+            user={user}
+            onOpenCommandPalette={() => setIsCommandOpen(true)}
+          />
+        </div>
+
+        {/* Content area */}
+        {isFullHeight ? (
+          // Full-height tabs: fill all remaining space, no scroll on this wrapper
           <main
-            className="flex-1 flex flex-col min-h-0 overflow-hidden"
+            className="flex-1 flex flex-col overflow-hidden min-h-0"
+            style={{
+              // On mobile, leave room for bottom nav
+              paddingBottom: isMobile ? `${MOBILE_NAV_HEIGHT}px` : 0,
+            }}
           >
             {children}
           </main>
         ) : (
+          // Scrollable content tabs
           <main
-            className={`flex-1 w-full ${maxWidthClass} mx-auto px-6 sm:px-8 py-8 pb-24 md:pb-12`}
+            className="flex-1 overflow-y-auto"
+            style={{
+              // On mobile, leave room for bottom nav
+              paddingBottom: isMobile
+                ? `${MOBILE_NAV_HEIGHT + 24}px`
+                : '48px',
+            }}
           >
-            {children}
+            <div
+              className={`w-full ${maxWidthClass} mx-auto`}
+              style={{
+                padding: isMobile ? '20px 16px' : '32px 32px',
+              }}
+            >
+              {children}
+            </div>
           </main>
         )}
       </div>
@@ -104,9 +158,17 @@ export function AppShell({
   );
 }
 
-export function StudentLayout(props) { return <AppShell {...props} />; }
-export function TeacherLayout(props) { return <AppShell {...props} />; }
-export function AdminLayout(props)   { return <AppShell {...props} />; }
+export function StudentLayout(props) {
+  return <AppShell {...props} />;
+}
+
+export function TeacherLayout(props) {
+  return <AppShell {...props} />;
+}
+
+export function AdminLayout(props) {
+  return <AppShell {...props} />;
+}
 
 export function Layout({
   children,
@@ -116,7 +178,7 @@ export function Layout({
   onLogout,
 }) {
   const [localTab, setLocalTab] = useState('assistant');
-  const activeTab    = externalActiveTab    ?? localTab;
+  const activeTab = externalActiveTab ?? localTab;
   const setActiveTab = externalSetActiveTab ?? setLocalTab;
 
   return (
