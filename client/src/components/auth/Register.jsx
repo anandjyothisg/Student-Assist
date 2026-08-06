@@ -122,7 +122,7 @@ export function Register({ onNavigate }) {
         <AuthInput label="Username" error={errors.username?.message}>
           <StyledInput
             type="text"
-            placeholder=". your_username"
+            placeholder=" your username"
             hasError={!!errors.username}
             {...register('username', {
               required: 'Username is required',

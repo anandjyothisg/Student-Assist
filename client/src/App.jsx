@@ -16,8 +16,7 @@ import { AskScreen } from './components/ask/AskScreen';
 import { DocumentViewer } from './components/viewer/DocumentViewer';
 import { AnalyticsPage } from './components/dashboard/AnalyticsPage';
 import { Notebook } from './components/notebook/Notebook';
-import { SettingsPanel } from './components/layout/SettingsPanel';
-import { Modal } from './components/ui/Modal';
+
 
 /* ─── Shared Input/Cell Styles ───────────────────────────────────────────── */
 const inputBase = {
@@ -274,7 +273,7 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [authScreen, setAuthScreen] = useState('login');
   const [authEmail, setAuthEmail] = useState('admin@demo.com');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+
 
   const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
@@ -322,11 +321,7 @@ function AppContent() {
     return () => window.removeEventListener('auth-expired', handleAuthExpired);
   }, [toast]);
 
-  useEffect(() => {
-    const handleOpenSettings = () => setIsModalOpen(true);
-    window.addEventListener('open-settings', handleOpenSettings);
-    return () => window.removeEventListener('open-settings', handleOpenSettings);
-  }, []);
+
 
   const handleLogout = async () => {
     setLoadingUser(true);
@@ -399,6 +394,7 @@ function AppContent() {
           setActiveTab={user ? setActiveTab : () => {}}
           user={user}
           onLogout={handleLogout}
+          onUpdateUser={setUser}
         >
           {currentTab === 'dashboard' ? (
             <AdminDashboard setActiveTab={setActiveTab} />
@@ -416,21 +412,7 @@ function AppContent() {
             <Notebook />
           ) : null}
 
-          <Modal
-            isOpen={isModalOpen}
-            onClose={() => setIsModalOpen(false)}
-            title="Account Settings"
-            size="lg"
-          >
-            <SettingsPanel
-              user={user}
-              onLogout={() => {
-                setIsModalOpen(false);
-                handleLogout();
-              }}
-              onUpdateUser={setUser}
-            />
-          </Modal>
+
         </Layout>
       )}
     </>

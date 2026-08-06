@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileDrawer';
 import { TopNav } from './TopNav';
 import { CommandPalette } from './CommandPalette';
+import { SettingsModal } from './SettingsModal';
 
-const TOPNAV_HEIGHT = 48; // px — must match TopNav's actual height
-const MOBILE_NAV_HEIGHT = 56; // px — must match MobileNav's actual height
+// These MUST match the actual rendered widths in Sidebar.jsx
+const SIDEBAR_COLLAPSED_WIDTH = 68;  // px — matches `isCollapsed ? 68 : 240` in Sidebar
+const SIDEBAR_EXPANDED_WIDTH  = 240; // px — matches `isCollapsed ? 68 : 240` in Sidebar
+const MOBILE_NAV_HEIGHT       = 56;  // px — matches MobileNav h-16 (64px) minus top border
 
 const FULL_HEIGHT_TABS = new Set([
   'assistant',
@@ -21,24 +24,26 @@ export function AppShell({
   setActiveTab,
   user,
   onLogout,
+  onUpdateUser,
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [isCommandOpen, setIsCommandOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isCommandOpen, setIsCommandOpen]       = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen]     = useState(false);
+  const [isMobile, setIsMobile]                 = useState(false);
 
+  // Responsive breakpoint detection
   useEffect(() => {
     const check = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      if (window.innerWidth < 1024) {
-        setSidebarCollapsed(true);
-      }
+      const w = window.innerWidth;
+      setIsMobile(w < 768);
+      if (w < 1024) setSidebarCollapsed(true);
     };
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // ⌘K command palette
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -50,8 +55,25 @@ export function AppShell({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Stable reference — useCallback ensures addEventListener/removeEventListener
+  // always get the same function object, preventing listener accumulation on re-renders.
+  const handleOpenSettings = useCallback(() => {
+    setIsSettingsOpen(true);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('open-settings', handleOpenSettings);
+    return () => window.removeEventListener('open-settings', handleOpenSettings);
+  }, [handleOpenSettings]);
+
   const isFullHeight = FULL_HEIGHT_TABS.has(activeTab);
-  const sidebarWidth = isMobile ? 0 : sidebarCollapsed ? 56 : 220;
+
+  // Width offset for the fixed sidebar
+  const sidebarWidth = isMobile
+    ? 0
+    : sidebarCollapsed
+      ? SIDEBAR_COLLAPSED_WIDTH
+      : SIDEBAR_EXPANDED_WIDTH;
 
   const role = user?.role || 'student';
   const maxWidthClass =
@@ -60,6 +82,13 @@ export function AppShell({
       : role === 'admin'
         ? 'max-w-[1200px]'
         : 'max-w-[880px]';
+
+  // Content padding responds to three tiers: mobile / tablet / desktop
+  const contentPadding = isMobile
+    ? '16px 16px'
+    : window.innerWidth < 1024
+      ? '24px 24px'
+      : '32px 40px';
 
   return (
     // Outer shell: exactly viewport height, no scroll
@@ -71,6 +100,7 @@ export function AppShell({
         color: 'var(--fg)',
       }}
     >
+      {/* Command palette — rendered outside layout flow to avoid z-index issues */}
       <CommandPalette
         isOpen={isCommandOpen}
         onClose={() => setIsCommandOpen(false)}
@@ -78,7 +108,19 @@ export function AppShell({
         user={user}
       />
 
-      {/* Desktop Sidebar — rendered but hidden via CSS on mobile */}
+      {/* Single SettingsModal instance — mounted/unmounted via AnimatePresence inside */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        user={user}
+        onLogout={() => {
+          setIsSettingsOpen(false);
+          onLogout?.();
+        }}
+        onUpdateUser={onUpdateUser}
+      />
+
+      {/* Desktop Sidebar — only rendered on md+ screens */}
       {!isMobile && (
         <Sidebar
           isCollapsed={sidebarCollapsed}
@@ -100,23 +142,22 @@ export function AppShell({
         />
       )}
 
-      {/* Main column: sits to the right of sidebar */}
+      {/* Main column: offset by the fixed sidebar width */}
       <div
         className="flex flex-col flex-1 overflow-hidden"
         style={{
-          // Sidebar is fixed, so we offset with marginLeft
           marginLeft: isMobile ? 0 : `${sidebarWidth}px`,
-          transition: 'margin-left 200ms ease-out',
+          transition: 'margin-left 250ms cubic-bezier(0.4, 0, 0.2, 1)',
           height: '100dvh',
         }}
       >
         {/* Top Nav — fixed height, never shrinks */}
         <div className="flex-shrink-0">
           <TopNav
-            onMenuOpen={null}
             activeTab={activeTab}
             user={user}
             onOpenCommandPalette={() => setIsCommandOpen(true)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
           />
         </div>
 
@@ -126,7 +167,6 @@ export function AppShell({
           <main
             className="flex-1 flex flex-col overflow-hidden min-h-0"
             style={{
-              // On mobile, leave room for bottom nav
               paddingBottom: isMobile ? `${MOBILE_NAV_HEIGHT}px` : 0,
             }}
           >
@@ -137,7 +177,6 @@ export function AppShell({
           <main
             className="flex-1 overflow-y-auto"
             style={{
-              // On mobile, leave room for bottom nav
               paddingBottom: isMobile
                 ? `${MOBILE_NAV_HEIGHT + 24}px`
                 : '48px',
@@ -145,9 +184,7 @@ export function AppShell({
           >
             <div
               className={`w-full ${maxWidthClass} mx-auto`}
-              style={{
-                padding: isMobile ? '20px 16px' : '32px 32px',
-              }}
+              style={{ padding: contentPadding }}
             >
               {children}
             </div>
@@ -178,7 +215,7 @@ export function Layout({
   onLogout,
 }) {
   const [localTab, setLocalTab] = useState('assistant');
-  const activeTab = externalActiveTab ?? localTab;
+  const activeTab   = externalActiveTab   ?? localTab;
   const setActiveTab = externalSetActiveTab ?? setLocalTab;
 
   return (

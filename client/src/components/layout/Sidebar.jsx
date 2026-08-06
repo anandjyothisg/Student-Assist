@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, LogOut, Settings, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LogOut, Settings, X, User } from 'lucide-react';
 import { NAV_ITEMS } from './navConfig';
 import { Avatar } from '../ui/Avatar';
 
@@ -11,20 +11,22 @@ function NavItem({ item, isActive, collapsed, onClick }) {
     <button
       onClick={() => onClick(item)}
       title={collapsed ? item.label : undefined}
-      className="w-full flex items-center rounded-md text-left relative transition-all duration-150 cursor-pointer select-none"
+      className="w-full flex items-center rounded-lg text-left relative transition-all duration-200 cursor-pointer select-none group"
       style={{
-        gap: collapsed ? 0 : '10px',
-        padding: collapsed ? '8px 0' : '8px 10px',
+        gap: collapsed ? 0 : '12px',
+        padding: collapsed ? '10px 12px' : '10px 14px',
         justifyContent: collapsed ? 'center' : 'flex-start',
         color: isActive ? 'var(--fg)' : 'var(--fg-3)',
         background: isActive ? 'var(--bg-hover)' : 'transparent',
         fontFamily: 'var(--font-sans)',
-        fontSize: '13px',
+        fontSize: '13.5px',
         fontWeight: isActive ? '500' : '400',
+        minHeight: '42px',
+        marginBottom: '2px',
       }}
       onMouseEnter={(e) => {
         if (!isActive) {
-          e.currentTarget.style.color = 'var(--fg-2)';
+          e.currentTarget.style.color = 'var(--fg)';
           e.currentTarget.style.background = 'var(--bg-subtle)';
         }
       }}
@@ -39,33 +41,47 @@ function NavItem({ item, isActive, collapsed, onClick }) {
       {isActive && (
         <motion.div
           layoutId="sidebar-active-bar"
-          className="absolute top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full"
+          className="absolute top-1/2 -translate-y-1/2 rounded-full"
           style={{
-            left: collapsed ? '4px' : '2px',
+            left: '0px',
+            width: '3px',
+            height: '20px',
             background: 'var(--accent)',
           }}
           transition={{ type: 'spring', stiffness: 500, damping: 35 }}
         />
       )}
 
-      <Icon
-        className="flex-shrink-0 transition-none"
+      {/* Icon wrapper */}
+      <div 
+        className="flex-shrink-0 flex items-center justify-center transition-transform duration-200"
         style={{
-          width: '15px',
-          height: '15px',
-          color: isActive ? 'var(--fg)' : 'var(--fg-3)',
+          width: '18px',
+          height: '18px',
+          marginLeft: collapsed ? '0' : '4px',
         }}
-        strokeWidth={isActive ? 2 : 1.75}
-      />
+      >
+        <Icon
+          className="transition-none"
+          style={{
+            width: '18px',
+            height: '18px',
+            color: isActive ? 'var(--fg)' : 'var(--fg-3)',
+          }}
+          strokeWidth={isActive ? 2.25 : 2}
+        />
+      </div>
 
+      {/* Label */}
       <AnimatePresence initial={false}>
         {!collapsed && (
           <motion.span
             initial={{ opacity: 0, width: 0 }}
             animate={{ opacity: 1, width: 'auto' }}
             exit={{ opacity: 0, width: 0 }}
-            transition={{ duration: 0.12 }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
             className="truncate whitespace-nowrap overflow-hidden block"
+            style={{ letterSpacing: '-0.01em' }}
           >
             {item.label}
           </motion.span>
@@ -105,43 +121,70 @@ function AccountPanel({ open, onClose, user, onLogout }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            transition={{ duration: 0.2 }}
             className="absolute inset-0 cursor-pointer"
-            style={{ background: 'rgba(0,0,0,0.35)' }}
+            style={{ 
+              background: 'rgba(0, 0, 0, 0.5)', 
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+            }}
             onClick={onClose}
           />
 
-          {/* Panel */}
+          {/* Panel Container */}
           <motion.div
             ref={ref}
-            initial={{ x: -288, opacity: 0 }}
+            initial={{ x: -360, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: -288, opacity: 0 }}
+            exit={{ x: -360, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 32 }}
             className="relative z-10 flex flex-col"
             style={{
-              width: '288px',
+              width: '360px',
+              maxWidth: '90vw',
               height: '100%',
               background: 'var(--bg-surface)',
               borderRight: '1px solid var(--border)',
-              boxShadow: '4px 0 24px rgba(0,0,0,0.12)',
+              boxShadow: '12px 0 48px rgba(0, 0, 0, 0.2)',
             }}
           >
             {/* Header */}
             <div
-              className="flex items-center justify-between px-5 h-14 flex-shrink-0"
-              style={{ borderBottom: '1px solid var(--border)' }}
+              className="flex items-center justify-between flex-shrink-0"
+              style={{ 
+                height: '72px',
+                padding: '0 24px',
+                borderBottom: '1px solid var(--border)',
+              }}
             >
-              <span
-                className="text-[11px] font-medium uppercase tracking-widest"
-                style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}
-              >
-                Account
-              </span>
+              <div className="flex items-center gap-3">
+                <div 
+                  className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{
+                    background: 'var(--bg-hover)',
+                    color: 'var(--fg-2)',
+                  }}
+                >
+                  <User className="w-4 h-4" strokeWidth={2} />
+                </div>
+                <span
+                  className="text-[14px] font-semibold tracking-tight"
+                  style={{ 
+                    color: 'var(--fg)', 
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  Account
+                </span>
+              </div>
+              
               <button
                 onClick={onClose}
-                className="w-7 h-7 rounded-md flex items-center justify-center cursor-pointer transition-colors"
-                style={{ color: 'var(--fg-3)' }}
+                className="w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer transition-all duration-150"
+                style={{ 
+                  color: 'var(--fg-3)',
+                  background: 'transparent',
+                }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.color = 'var(--fg)';
                   e.currentTarget.style.background = 'var(--bg-hover)';
@@ -150,107 +193,221 @@ function AccountPanel({ open, onClose, user, onLogout }) {
                   e.currentTarget.style.color = 'var(--fg-3)';
                   e.currentTarget.style.background = 'transparent';
                 }}
+                aria-label="Close account panel"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-[18px] h-[18px]" strokeWidth={2} />
               </button>
             </div>
 
-            {/* User Info */}
-            <div className="px-5 py-6 flex items-center gap-3.5 flex-shrink-0">
-              <Avatar
-                name={user?.username || user?.email}
-                src={user?.avatar}
-                size="lg"
-              />
-              <div className="flex flex-col min-w-0 gap-0.5">
-                <span
-                  className="text-[14px] font-semibold truncate"
-                  style={{ color: 'var(--fg)', fontFamily: 'var(--font-sans)' }}
-                >
-                  {user?.username || 'User'}
-                </span>
-                <span
-                  className="text-[12px] truncate"
+            {/* User Profile Card */}
+            <div 
+              className="flex-shrink-0"
+              style={{
+                padding: '32px 24px',
+                borderBottom: '1px solid var(--border)',
+              }}
+            >
+              <div className="flex items-start gap-4">
+                <Avatar
+                  name={user?.username || user?.email}
+                  src={user?.avatar}
+                  size="lg"
+                  className="flex-shrink-0"
                   style={{
-                    color: 'var(--fg-3)',
-                    fontFamily: 'var(--font-mono)',
+                    width: '56px',
+                    height: '56px',
+                    fontSize: '20px',
                   }}
-                >
-                  {user?.email || ''}
-                </span>
-                <span
-                  className="mt-1 text-[10px] font-medium uppercase tracking-wider w-fit px-2 py-0.5 rounded-md"
-                  style={{
-                    background: 'var(--bg-hover)',
-                    color: 'var(--fg-3)',
-                    border: '1px solid var(--border)',
-                    fontFamily: 'var(--font-mono)',
-                  }}
-                >
-                  {user?.role || 'student'}
-                </span>
+                />
+                
+                <div className="flex flex-col min-w-0 flex-1 gap-2">
+                  <div className="flex flex-col gap-1">
+                    <span
+                      className="text-[16px] font-semibold truncate leading-tight"
+                      style={{ 
+                        color: 'var(--fg)', 
+                        fontFamily: 'var(--font-sans)',
+                        letterSpacing: '-0.01em',
+                      }}
+                    >
+                      {user?.username || 'User'}
+                    </span>
+                    <span
+                      className="text-[13px] truncate leading-tight"
+                      style={{
+                        color: 'var(--fg-3)',
+                        fontFamily: 'var(--font-mono)',
+                      }}
+                    >
+                      {user?.email || 'user@example.com'}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 mt-1">
+                    <span
+                      className="text-[11px] font-bold uppercase tracking-wider w-fit px-3 py-1.5 rounded-md"
+                      style={{
+                        background: 'var(--accent)',
+                        color: 'var(--bg)',
+                        fontFamily: 'var(--font-mono)',
+                        letterSpacing: '0.05em',
+                      }}
+                    >
+                      {user?.role || 'student'}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Actions */}
+            {/* Menu Section */}
             <div
-              className="flex-1 px-3 py-2"
-              style={{ borderTop: '1px solid var(--border)' }}
+              className="flex-1 flex flex-col"
+              style={{ 
+                padding: '20px 16px',
+                gap: '8px',
+              }}
             >
+              {/* Settings Button */}
               <button
                 onClick={() => {
                   onClose();
                   window.dispatchEvent(new CustomEvent('open-settings'));
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer"
+                className="w-full flex items-center gap-4 rounded-xl text-left transition-all duration-150 cursor-pointer group"
                 style={{
+                  padding: '14px 16px',
                   color: 'var(--fg-2)',
-                  fontSize: '13px',
+                  fontSize: '14px',
                   fontFamily: 'var(--font-sans)',
+                  fontWeight: '500',
+                  background: 'transparent',
+                  border: '1px solid transparent',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.color = 'var(--fg)';
                   e.currentTarget.style.background = 'var(--bg-subtle)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.color = 'var(--fg-2)';
                   e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'transparent';
                 }}
               >
-                <Settings
-                  className="w-4 h-4 flex-shrink-0"
-                  style={{ color: 'var(--fg-3)' }}
-                />
-                <span>Settings</span>
+                <div 
+                  className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors duration-150"
+                  style={{
+                    background: 'var(--bg-hover)',
+                    color: 'var(--fg-3)',
+                  }}
+                >
+                  <Settings className="w-[18px] h-[18px]" strokeWidth={2} />
+                </div>
+                
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="truncate">Settings & Preferences</span>
+                  <span 
+                    className="text-[11px] truncate"
+                    style={{
+                      color: 'var(--fg-3)',
+                      fontWeight: '400',
+                    }}
+                  >
+                    Manage your account
+                  </span>
+                </div>
               </button>
             </div>
 
-            {/* Logout */}
+            {/* Sign Out Section - Enhanced Design */}
             <div
-              className="p-3 flex-shrink-0"
-              style={{ borderTop: '1px solid var(--border)' }}
+              className="flex-shrink-0"
+              style={{ 
+                padding: '20px 16px 24px 16px',
+                borderTop: '1px solid var(--border)',
+                background: 'var(--bg)',
+              }}
             >
               <button
                 onClick={() => {
                   onClose();
                   onLogout();
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer"
+                className="w-full flex items-center gap-4 rounded-xl transition-all duration-200 cursor-pointer group"
                 style={{
-                  color: 'var(--error)',
-                  fontSize: '13px',
+                  padding: '16px 18px',
+                  background: 'var(--error)',
+                  color: '#ffffff',
+                  fontSize: '14px',
                   fontFamily: 'var(--font-sans)',
+                  fontWeight: '600',
+                  border: 'none',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--error-dim)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+                  e.currentTarget.style.opacity = '0.92';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                  e.currentTarget.style.opacity = '1';
+                }}
+              >
+                <div 
+                  className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    color: '#ffffff',
+                  }}
+                >
+                  <LogOut className="w-[18px] h-[18px]" strokeWidth={2.5} />
+                </div>
+                
+                <div className="flex flex-col gap-0.5 items-start min-w-0">
+                  <span className="truncate">Sign out</span>
+                  <span 
+                    className="text-[11px] truncate"
+                    style={{
+                      color: 'rgba(255, 255, 255, 0.85)',
+                      fontWeight: '400',
+                    }}
+                  >
+                    End your session
+                  </span>
+                </div>
+              </button>
+              
+              {/* Optional: Alternative minimal design - uncomment to use */}
+              {/* <button
+                onClick={() => {
+                  onClose();
+                  onLogout();
+                }}
+                className="w-full flex items-center justify-center gap-3 rounded-xl transition-all duration-200 cursor-pointer"
+                style={{
+                  padding: '14px 18px',
+                  background: 'transparent',
+                  color: 'var(--error)',
+                  fontSize: '14px',
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: '600',
+                  border: '2px solid var(--error)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--error)';
+                  e.currentTarget.style.color = '#ffffff';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'var(--error)';
                 }}
               >
-                <LogOut className="w-4 h-4 flex-shrink-0" />
-                <span className="font-medium">Sign out</span>
-              </button>
+                <LogOut className="w-[18px] h-[18px]" strokeWidth={2.5} />
+                <span>Sign out</span>
+              </button> */}
             </div>
           </motion.div>
         </div>
@@ -270,39 +427,39 @@ export function Sidebar({
   const [accountOpen, setAccountOpen] = useState(false);
   const role = user?.role ?? 'student';
   const items = NAV_ITEMS[role] ?? NAV_ITEMS.student;
-  const width = isCollapsed ? 56 : 220;
+  const width = isCollapsed ? 68 : 240;
 
   return (
     <>
       <aside
-        className="fixed top-0 left-0 h-full z-30 flex-col md:flex hidden"
+        className="fixed top-0 left-0 h-full z-30 flex-col hidden md:flex"
         style={{
           width: `${width}px`,
           background: 'var(--bg)',
           borderRight: '1px solid var(--border)',
-          transition: 'width 200ms ease-out',
-          display: undefined, // let md:flex override
+          transition: 'width 250ms cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
-        {/* Logo */}
+        {/* Logo Section */}
         <div
           className="flex items-center flex-shrink-0 overflow-hidden"
           style={{
-            height: '56px',
-            padding: isCollapsed ? '0 14px' : '0 14px',
+            height: '64px',
+            padding: isCollapsed ? '0 18px' : '0 20px',
             borderBottom: '1px solid var(--border)',
           }}
         >
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className="flex-shrink-0 rounded-lg flex items-center justify-center cursor-default"
+              className="flex-shrink-0 rounded-xl flex items-center justify-center cursor-default shadow-sm"
               style={{
-                width: '28px',
-                height: '28px',
-                background: 'var(--fg)',
+                width: '32px',
+                height: '32px',
+                background: 'linear-gradient(135deg, var(--fg) 0%, var(--fg-2) 100%)',
                 color: 'var(--bg)',
                 fontFamily: 'var(--font-serif)',
-                fontSize: '14px',
+                fontSize: '15px',
+                fontWeight: '600',
               }}
             >
               A
@@ -311,12 +468,15 @@ export function Sidebar({
             <AnimatePresence initial={false}>
               {!isCollapsed && (
                 <motion.span
-                  initial={{ opacity: 0, x: -6 }}
+                  initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -6 }}
-                  transition={{ duration: 0.12 }}
-                  className="font-sans font-medium tracking-tight whitespace-nowrap text-[14px]"
-                  style={{ color: 'var(--fg)' }}
+                  exit={{ opacity: 0, x: -8 }}
+                  transition={{ duration: 0.15, ease: 'easeInOut' }}
+                  className="font-sans font-semibold tracking-tight whitespace-nowrap text-[15px]"
+                  style={{ 
+                    color: 'var(--fg)',
+                    letterSpacing: '-0.02em'
+                  }}
                 >
                   AuraStudy
                 </motion.span>
@@ -325,13 +485,15 @@ export function Sidebar({
           </div>
         </div>
 
-        {/* Nav */}
+        {/* Navigation Section */}
         <nav
-          className="flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden"
+          className="flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar"
           style={{
             flex: 1,
-            padding: '8px',
+            padding: isCollapsed ? '12px 8px' : '12px 12px',
             minHeight: 0,
+            gap: '2px',
+            overscrollBehavior: 'contain',
           }}
         >
           {items.map((item) => (
@@ -345,26 +507,27 @@ export function Sidebar({
           ))}
         </nav>
 
-        {/* Bottom */}
+        {/* Bottom Section */}
         <div
           className="flex flex-col flex-shrink-0"
           style={{
             borderTop: '1px solid var(--border)',
-            padding: '8px',
-            gap: '4px',
+            padding: isCollapsed ? '12px 8px' : '12px 12px',
+            gap: '8px',
           }}
         >
-          {/* Account button */}
+          {/* Account Button */}
           <button
             onClick={() => setAccountOpen(true)}
             title={isCollapsed ? user?.username || 'Account' : undefined}
-            className="w-full flex items-center rounded-lg transition-all cursor-pointer overflow-hidden"
+            className="w-full flex items-center rounded-lg transition-all duration-200 cursor-pointer overflow-hidden group"
             style={{
-              gap: isCollapsed ? 0 : '10px',
-              padding: isCollapsed ? '8px 0' : '8px 10px',
+              gap: isCollapsed ? 0 : '12px',
+              padding: isCollapsed ? '10px 12px' : '10px 12px',
               justifyContent: isCollapsed ? 'center' : 'flex-start',
               color: 'var(--fg-2)',
-              minHeight: '40px',
+              minHeight: '48px',
+              background: 'transparent',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'var(--bg-subtle)';
@@ -386,20 +549,25 @@ export function Sidebar({
                   initial={{ opacity: 0, width: 0 }}
                   animate={{ opacity: 1, width: 'auto' }}
                   exit={{ opacity: 0, width: 0 }}
-                  transition={{ duration: 0.12 }}
-                  className="flex flex-col min-w-0 overflow-hidden"
+                  transition={{ duration: 0.15, ease: 'easeInOut' }}
+                  className="flex flex-col min-w-0 overflow-hidden gap-0.5"
                 >
                   <span
-                    className="text-[13px] font-medium truncate whitespace-nowrap"
-                    style={{ color: 'var(--fg)', fontFamily: 'var(--font-sans)' }}
+                    className="text-[13px] font-semibold truncate whitespace-nowrap leading-tight"
+                    style={{ 
+                      color: 'var(--fg)', 
+                      fontFamily: 'var(--font-sans)',
+                      letterSpacing: '-0.01em'
+                    }}
                   >
                     {user?.username || 'User'}
                   </span>
                   <span
-                    className="text-[10px] truncate whitespace-nowrap uppercase tracking-wider"
+                    className="text-[10.5px] truncate whitespace-nowrap uppercase tracking-wider leading-tight"
                     style={{
                       color: 'var(--fg-3)',
                       fontFamily: 'var(--font-mono)',
+                      fontWeight: '500',
                     }}
                   >
                     {user?.role || 'student'}
@@ -409,17 +577,18 @@ export function Sidebar({
             </AnimatePresence>
           </button>
 
-          {/* Collapse toggle */}
+          {/* Collapse Toggle */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="w-full flex items-center justify-center rounded-lg transition-colors cursor-pointer"
+            className="w-full flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer"
             style={{
               color: 'var(--fg-3)',
-              padding: '6px 0',
-              minHeight: '32px',
+              padding: '8px 0',
+              minHeight: '36px',
+              background: 'transparent',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--fg-2)';
+              e.currentTarget.style.color = 'var(--fg)';
               e.currentTarget.style.background = 'var(--bg-subtle)';
             }}
             onMouseLeave={(e) => {
@@ -429,9 +598,17 @@ export function Sidebar({
             aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {isCollapsed ? (
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-[18px] h-[18px]" strokeWidth={2} />
             ) : (
-              <ChevronLeft className="w-4 h-4" />
+              <div className="flex items-center gap-2">
+                <ChevronLeft className="w-[18px] h-[18px]" strokeWidth={2} />
+                <span 
+                  className="text-[11px] font-medium uppercase tracking-wider"
+                  style={{ fontFamily: 'var(--font-sans)' }}
+                >
+                  Collapse
+                </span>
+              </div>
             )}
           </button>
         </div>
@@ -443,6 +620,23 @@ export function Sidebar({
         user={user}
         onLogout={onLogout}
       />
+
+      {/* Custom Scrollbar Styles — standard <style> tag (not Next.js jsx) */}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 5px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: var(--border);
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: var(--fg-3);
+        }
+      `}</style>
     </>
   );
 }

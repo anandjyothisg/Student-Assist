@@ -142,7 +142,7 @@ export function Login({ onNavigate, onLoginSuccess }) {
             <input
               type={showPassword ? 'text' : 'password'}
               placeholder="••••••••"
-              className="w-full h-11 px-4 pr-11 rounded-md text-[14px] outline-none transition-all"
+              className="w-full h-11 px-5 pr-11 rounded-md text-[14px] outline-none transition-all"
               style={{
                 background: 'var(--bg-surface)',
                 border: `1px solid ${errors.password ? 'var(--error)' : 'var(--border)'}`,

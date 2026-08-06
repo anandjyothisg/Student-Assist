@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
-import { Mail, ArrowLeft, KeyRound } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import { mockAuthApi } from './api';
-import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
 
 export function ForgotPassword({ onNavigate, setEmailState }) {
   const toast = useToast();
@@ -18,7 +16,7 @@ export function ForgotPassword({ onNavigate, setEmailState }) {
   } = useForm({
     defaultValues: {
       email: '',
-    }
+    },
   });
 
   const onSubmit = async (data) => {
@@ -37,65 +35,144 @@ export function ForgotPassword({ onNavigate, setEmailState }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="w-full max-w-md mx-auto font-sans"
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+      className="w-full"
     >
-      <div className="shadow-premium-xl rounded-md p-8 relative overflow-hidden flex flex-col gap-6" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-        
-        {/* Glow Sphere */}
-        <div className="absolute -top-24 -left-24 w-48 h-48 rounded-full blur-3xl pointer-events-none" style={{ background: 'var(--accent-dim)' }} />
-
-        <button
-          onClick={() => onNavigate('login')}
-          className="flex items-center gap-1.5 text-xs transition-colors self-start cursor-pointer group font-semibold"
-          style={{ color: 'var(--fg-3)' }}
-        >
-          <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-          Back to Sign In
-        </button>
-
-        <div className="text-center relative z-10">
-          <div className="w-10 h-10 rounded-md flex items-center justify-center mx-auto mb-3" style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
-            <KeyRound className="w-5 h-5" />
+      {/* Wordmark */}
+      <div className="mb-10">
+        <div className="flex items-center gap-2.5 mb-6">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{
+              background: 'var(--fg)',
+              color: 'var(--bg)',
+              fontFamily: 'var(--font-serif)',
+              fontSize: '15px',
+            }}
+          >
+            A
           </div>
-          <h2 className="hero-title text-3xl font-normal mb-1" style={{ color: 'var(--fg)' }}>
-            Forgot Password
-          </h2>
-          <p className="text-xs font-normal" style={{ color: 'var(--fg-3)' }}>
-            Enter your email to receive a 6-digit OTP code
-          </p>
+          <span
+            className="text-[15px] font-medium"
+            style={{ color: 'var(--fg)', fontFamily: 'var(--font-sans)' }}
+          >
+            AuraStudy AI
+          </span>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 relative z-10">
-          <Input
-            label="Email Address"
-            type="text"
-            placeholder="student@demo.com"
-            iconLeft={Mail}
-            error={errors.email?.message}
+        <h1
+          className="hero-title text-[32px] sm:text-[40px] mb-2"
+          style={{ color: 'var(--fg)' }}
+        >
+          Forgot Password
+        </h1>
+        <p
+          className="text-[14px]"
+          style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}
+        >
+          Enter your email to receive a 6-digit verification code
+        </p>
+      </div>
+
+      {/* Form */}
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="flex flex-col gap-5"
+        noValidate
+      >
+        {/* Email */}
+        <div className="flex flex-col gap-1.5">
+          <label
+            className="text-[11px] font-medium uppercase tracking-widest"
+            style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}
+          >
+            Email
+          </label>
+          <input
+            type="email"
+            placeholder="you@university.edu"
+            autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            className="w-full h-11 px-4 rounded-md text-[14px] outline-none transition-all"
+            style={{
+              background: 'var(--bg-surface)',
+              border: `1px solid ${errors.email ? 'var(--error)' : 'var(--border)'}`,
+              color: 'var(--fg)',
+              fontFamily: 'var(--font-sans)',
+            }}
+            onFocus={(e) => {
+              if (!errors.email)
+                e.currentTarget.style.borderColor = 'var(--border-hover)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = errors.email
+                ? 'var(--error)'
+                : 'var(--border)';
+            }}
             {...register('email', {
-              required: 'Email address is required',
+              required: 'Email is required',
               pattern: {
                 value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                message: 'Invalid email address format',
+                message: 'Invalid email address',
               },
             })}
           />
+          {errors.email && (
+            <span
+              className="text-[11px]"
+              style={{ color: 'var(--error)', fontFamily: 'var(--font-sans)' }}
+            >
+              {errors.email.message}
+            </span>
+          )}
+        </div>
 
-          <Button
-            type="submit"
-            loading={loading}
-            variant="accent"
-            className="w-full font-medium rounded-md h-11 mt-2 shadow-sm"
-          >
-            Send Verification Code
-          </Button>
-        </form>
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full h-11 rounded-md text-[14px] font-medium mt-1 transition-all cursor-pointer disabled:opacity-50"
+          style={{
+            background: 'var(--fg)',
+            color: 'var(--bg)',
+            fontFamily: 'var(--font-sans)',
+          }}
+          onMouseEnter={(e) => {
+            if (!loading) e.currentTarget.style.opacity = '0.9';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.opacity = '1';
+          }}
+        >
+          {loading ? 'Sending...' : 'Send Verification Code'}
+        </button>
+      </form>
 
-      </div>
+      {/* Footer */}
+      <p
+        className="mt-6 text-[13px] text-center"
+        style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}
+      >
+        Remember your password?{' '}
+        <button
+          type="button"
+          onClick={() => onNavigate && onNavigate('login')}
+          className="font-medium cursor-pointer hover:underline transition-opacity hover:opacity-80"
+          style={{
+            color: 'var(--fg-2)',
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          Back to Sign In
+        </button>
+      </p>
     </motion.div>
   );
 }

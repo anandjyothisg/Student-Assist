@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  User, Lock, Monitor, Sun, Moon, Laptop, Palette, Smartphone, LogOut,
+  User, Lock, Monitor, Sun, Moon, Laptop, Palette, Smartphone, LogOut, Check,
+  ChevronRight,
 } from 'lucide-react';
 
 import { Button } from '../ui/Button';
@@ -12,17 +13,25 @@ import { mockAuthApi } from '../auth/api';
 
 function SectionHeader({ title, description }) {
   return (
-    <div className="mb-6">
+    <div style={{ marginBottom: '20px' }}>
       <h3
-        className="text-[15px] font-semibold tracking-tight"
-        style={{ color: 'var(--fg)', fontFamily: 'var(--font-sans)' }}
+        className="text-sm md:text-base font-semibold tracking-tight"
+        style={{
+          color: 'var(--fg)',
+          fontFamily: 'var(--font-sans)',
+          letterSpacing: '-0.01em',
+          marginBottom: '8px',
+        }}
       >
         {title}
       </h3>
       {description && (
         <p
-          className="text-[12px] mt-1"
-          style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}
+          className="text-xs md:text-sm leading-relaxed"
+          style={{
+            color: 'var(--fg-3)',
+            fontFamily: 'var(--font-sans)',
+          }}
         >
           {description}
         </p>
@@ -35,23 +44,33 @@ export function SettingsPanel({ user, onLogout, onUpdateUser }) {
   const toast = useToast();
   const { theme, setTheme } = useTheme();
 
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab]           = useState('profile');
+  const [isMobile, setIsMobile]             = useState(() => window.innerWidth < 768);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
-  const [profileName, setProfileName] = useState(user?.username || user?.full_name || '');
+  const [profileName, setProfileName]   = useState(user?.username || user?.full_name || '');
   const [profileEmail, setProfileEmail] = useState(user?.email || '');
   const [savingProfile, setSavingProfile] = useState(false);
 
-  const [currPassword, setCurrPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  const [currPassword, setCurrPassword]       = useState('');
+  const [newPassword, setNewPassword]         = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [savingPassword, setSavingPassword] = useState(false);
+  const [savingPassword, setSavingPassword]   = useState(false);
 
   const [sessions, setSessions] = useState([
-    { id: 1, device: 'Windows PC · Chrome', location: 'Kerala, India', status: 'Active now', current: true },
-    { id: 2, device: 'MacBook Pro · Safari', location: 'California, USA', status: '3 days ago', current: false },
-    { id: 3, device: 'iPhone 15 · Mobile App', location: 'Kerala, India', status: '2 hours ago', current: false },
+    { id: 1, device: 'Windows PC · Chrome',    location: 'Kerala, India',    status: 'Active now',  current: true  },
+    { id: 2, device: 'MacBook Pro · Safari',    location: 'California, USA',  status: '3 days ago',  current: false },
+    { id: 3, device: 'iPhone 15 · Mobile App',  location: 'Kerala, India',    status: '2 hours ago', current: false },
   ]);
 
+  // Responsive layout
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Sync user prop changes into form state
   useEffect(() => {
     if (user) {
       setProfileName(user.username || user.full_name || '');
@@ -60,22 +79,30 @@ export function SettingsPanel({ user, onLogout, onUpdateUser }) {
   }, [user]);
 
   const tabs = [
-    { id: 'profile',  label: 'Profile',  icon: User },
-    { id: 'theme',    label: 'Appearance', icon: Palette },
-    { id: 'password', label: 'Password', icon: Lock },
-    { id: 'sessions', label: 'Sessions', icon: Monitor },
-    { id: 'logout',   label: 'Sign out', icon: LogOut },
+    { id: 'profile',  label: 'Profile',    icon: User     },
+    { id: 'theme',    label: 'Appearance', icon: Palette  },
+    { id: 'password', label: 'Password',   icon: Lock     },
+    { id: 'sessions', label: 'Sessions',   icon: Monitor  },
+    { id: 'logout',   label: 'Sign out',   icon: LogOut   },
   ];
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    if (isMobile) setShowMobileMenu(false);
+  };
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
-    if (!profileName.trim()) { toast.warning('Name cannot be blank.'); return; }
+    if (!profileName.trim()) {
+      toast.warning('Name cannot be blank.');
+      return;
+    }
     setSavingProfile(true);
     try {
       const parts = profileName.trim().split(' ');
       await mockAuthApi.updateProfile(parts[0] || '', parts.slice(1).join(' ') || '');
       if (onUpdateUser) onUpdateUser({ ...user, username: profileName.trim() });
-      toast.success('Profile updated.');
+      toast.success('Profile updated successfully.');
     } catch {
       toast.error('Failed to update profile.');
     } finally {
@@ -91,8 +118,10 @@ export function SettingsPanel({ user, onLogout, onUpdateUser }) {
     setSavingPassword(true);
     try {
       await mockAuthApi.changePassword(currPassword, newPassword, confirmPassword);
-      toast.success('Password updated.');
-      setCurrPassword(''); setNewPassword(''); setConfirmPassword('');
+      toast.success('Password updated successfully.');
+      setCurrPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
     } catch (err) {
       toast.error(err.message || 'Failed to update password.');
     } finally {
@@ -105,276 +134,514 @@ export function SettingsPanel({ user, onLogout, onUpdateUser }) {
     toast.info(`Session revoked: ${device}`);
   };
 
-  return (
-    <div
-      className="flex flex-col md:flex-row min-h-[480px]"
-      style={{ fontFamily: 'var(--font-sans)' }}
-    >
-      {/* Tab List */}
-      <nav
-        className="md:w-48 flex-shrink-0 flex flex-row md:flex-col gap-0.5 p-1 md:p-2 overflow-x-auto border-b md:border-b-0 md:border-r"
-        style={{ borderColor: 'var(--border)' }}
+  const renderContent = () => (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={activeTab}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.14, ease: 'easeInOut' }}
+        className="w-full"
       >
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          const isDanger = tab.id === 'logout';
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-md text-left whitespace-nowrap transition-colors cursor-pointer"
-              style={{
-                color: isDanger
-                  ? isActive ? 'var(--error)' : 'var(--error)'
-                  : isActive ? 'var(--fg)' : 'var(--fg-3)',
-                background: isActive
-                  ? isDanger ? 'var(--error-dim)' : 'var(--bg-hover)'
-                  : 'transparent',
-                fontSize: '13px',
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = isDanger ? 'var(--error-dim)' : 'var(--bg-subtle)';
-                  e.currentTarget.style.color = isDanger ? 'var(--error)' : 'var(--fg-2)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = isDanger ? 'var(--error)' : 'var(--fg-3)';
-                }
-              }}
-            >
-              <Icon
-                className="w-3.5 h-3.5 flex-shrink-0"
-                style={{ color: isDanger ? 'var(--error)' : isActive ? 'var(--fg)' : 'var(--fg-3)' }}
+        {/* ── PROFILE ── */}
+        {activeTab === 'profile' && (
+          <form onSubmit={handleSaveProfile} className="flex flex-col w-full" style={{ gap: '20px' }}>
+            <SectionHeader
+              title="Profile Information"
+              description="Update your display name and personal information. Your email is managed by your institution."
+            />
+            <div className="flex flex-col w-full" style={{ gap: '16px' }}>
+              <Input
+                label="Full Name"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="Enter your full name"
+                required
               />
-              <span className="font-medium">{tab.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+              <Input
+                label="Email Address"
+                type="email"
+                value={profileEmail}
+                readOnly
+                disabled
+                helperText="Email cannot be changed and is managed by your institution."
+              />
+            </div>
+            <div style={{ paddingTop: '4px' }}>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                loading={savingProfile}
+                className="w-full sm:w-auto whitespace-nowrap"
+              >
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        )}
 
-      {/* Content Pane */}
-      <div className="flex-1 p-4 md:p-6 overflow-y-auto" style={{ minHeight: '320px', maxHeight: '520px' }}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.12 }}
-          >
+        {/* ── APPEARANCE ── */}
+        {activeTab === 'theme' && (
+          <div className="flex flex-col w-full" style={{ gap: '20px' }}>
+            <SectionHeader
+              title="Appearance Settings"
+              description="Customize how the application looks on your device. Choose between light, dark, or system theme."
+            />
+            <div className="flex flex-col w-full" style={{ gap: '10px' }}>
+              {[
+                { id: 'light',  icon: Sun,    label: 'Light Mode',      desc: 'Clean and bright'   },
+                { id: 'dark',   icon: Moon,   label: 'Dark Mode',       desc: 'Easy on the eyes'   },
+                { id: 'system', icon: Laptop, label: 'System Default',  desc: 'Follow preferences' },
+              ].map((mode) => {
+                const ModeIcon   = mode.icon;
+                const isSelected = theme === mode.id;
 
-            {/* PROFILE */}
-            {activeTab === 'profile' && (
-              <form onSubmit={handleSaveProfile} className="flex flex-col gap-5 max-w-sm">
-                <SectionHeader
-                  title="Profile"
-                  description="Update your display name. Your email is managed by your institution."
-                />
-                <Input
-                  label="Full Name"
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
-                  placeholder="Your name"
-                  required
-                />
-                <Input
-                  label="Email Address"
-                  type="email"
-                  value={profileEmail}
-                  readOnly
-                  disabled
-                  helperText="Email cannot be changed."
-                />
-                <div>
-                  <Button type="submit" variant="primary" size="sm" loading={savingProfile}>
-                    Save changes
-                  </Button>
-                </div>
-              </form>
-            )}
-
-            {/* THEME */}
-            {activeTab === 'theme' && (
-              <div className="flex flex-col gap-5">
-                <SectionHeader
-                  title="Appearance"
-                  description="Choose how SmartStudent looks on your device."
-                />
-                <div className="flex flex-col gap-2 max-w-xs">
-                  {[
-                    { id: 'light', icon: Sun, label: 'Light' },
-                    { id: 'dark', icon: Moon, label: 'Dark' },
-                    { id: 'system', icon: Laptop, label: 'System' },
-                  ].map((mode) => {
-                    const ModeIcon = mode.icon;
-                    const isSelected = theme === mode.id;
-                    return (
-                      <button
-                        key={mode.id}
-                        type="button"
-                        onClick={() => setTheme(mode.id)}
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all text-left"
-                        style={{
-                          background: isSelected ? 'var(--bg-hover)' : 'transparent',
-                          border: `1px solid ${isSelected ? 'var(--border-hover)' : 'var(--border)'}`,
-                          color: isSelected ? 'var(--fg)' : 'var(--fg-2)',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isSelected) {
-                            e.currentTarget.style.background = 'var(--bg-subtle)';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isSelected) {
-                            e.currentTarget.style.background = 'transparent';
-                          }
-                        }}
-                      >
-                        <ModeIcon
-                          className="w-4 h-4 flex-shrink-0"
-                          style={{ color: isSelected ? 'var(--accent)' : 'var(--fg-3)' }}
-                        />
-                        <span className="text-[13px] font-medium" style={{ fontFamily: 'var(--font-sans)' }}>
-                          {mode.label}
-                        </span>
-                        {isSelected && (
-                          <div
-                            className="ml-auto w-1.5 h-1.5 rounded-full"
-                            style={{ background: 'var(--accent)' }}
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* PASSWORD */}
-            {activeTab === 'password' && (
-              <form onSubmit={handleSaveSecurity} className="flex flex-col gap-5 max-w-sm">
-                <SectionHeader
-                  title="Password"
-                  description="Change the password used to access your account."
-                />
-                <Input
-                  label="Current Password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={currPassword}
-                  onChange={(e) => setCurrPassword(e.target.value)}
-                  required
-                />
-                <Input
-                  label="New Password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                />
-                <Input
-                  label="Confirm Password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
-                <div>
-                  <Button type="submit" variant="primary" size="sm" loading={savingPassword}>
-                    Update password
-                  </Button>
-                </div>
-              </form>
-            )}
-
-            {/* SESSIONS */}
-            {activeTab === 'sessions' && (
-              <div className="flex flex-col gap-5 max-w-md">
-                <SectionHeader
-                  title="Sessions"
-                  description="Manage devices that have access to your account."
-                />
-                <div className="flex flex-col gap-2">
-                  {sessions.map((session) => (
+                return (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setTheme(mode.id)}
+                    className="flex items-center rounded-lg cursor-pointer transition-all duration-150 text-left group w-full"
+                    style={{
+                      padding: '12px 14px',
+                      gap: '12px',
+                      background: isSelected ? 'var(--bg-hover)' : 'transparent',
+                      border: `1px solid ${isSelected ? 'var(--border-hover)' : 'var(--border)'}`,
+                      color: isSelected ? 'var(--fg)' : 'var(--fg-2)',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.background    = 'var(--bg-subtle)';
+                        e.currentTarget.style.borderColor   = 'var(--border-hover)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.background    = 'transparent';
+                        e.currentTarget.style.borderColor   = 'var(--border)';
+                      }
+                    }}
+                  >
                     <div
-                      key={session.id}
-                      className="flex items-center justify-between px-4 py-3 rounded-xl gap-4"
+                      className="flex-shrink-0 flex items-center justify-center rounded-md"
                       style={{
-                        border: '1px solid var(--border)',
-                        background: session.current ? 'var(--bg-subtle)' : 'transparent',
+                        width: '36px',
+                        height: '36px',
+                        background: 'var(--bg-subtle)',
+                        color: isSelected ? 'var(--fg)' : 'var(--fg-3)',
                       }}
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <Smartphone className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--fg-3)' }} />
-                          <p className="text-[13px] font-medium truncate" style={{ color: 'var(--fg)' }}>
-                            {session.device}
-                          </p>
-                          {session.current && (
-                            <span
-                              className="text-[10px] font-medium px-1.5 py-0.5 rounded-md uppercase tracking-wider"
-                              style={{
-                                background: 'var(--accent-dim)',
-                                color: 'var(--accent)',
-                                border: '1px solid var(--accent)',
-                                opacity: 0.85,
-                              }}
-                            >
-                              Active
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] mt-0.5 ml-6" style={{ color: 'var(--fg-3)' }}>
-                          {session.location} · {session.status}
-                        </p>
-                      </div>
-                      {!session.current && (
-                        <Button
-                          variant="danger"
-                          size="xs"
-                          onClick={() => handleRevokeSession(session.id, session.device)}
-                        >
-                          Revoke
-                        </Button>
-                      )}
+                      <ModeIcon className="w-4 h-4" strokeWidth={2} />
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* LOGOUT */}
-            {activeTab === 'logout' && (
-              <div className="flex flex-col gap-5 max-w-sm">
-                <SectionHeader
-                  title="Sign out"
-                  description="This will end your current session and invalidate your access tokens."
-                />
+                    <div className="flex flex-col min-w-0 flex-1" style={{ gap: '2px' }}>
+                      <span
+                        className="text-xs md:text-sm font-medium"
+                        style={{ fontFamily: 'var(--font-sans)' }}
+                      >
+                        {mode.label}
+                      </span>
+                      <span
+                        className="text-xs"
+                        style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}
+                      >
+                        {mode.desc}
+                      </span>
+                    </div>
+
+                    {isSelected && (
+                      <div
+                        className="flex-shrink-0 flex items-center justify-center rounded-full"
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          background: 'var(--fg)',
+                          color: 'var(--bg)',
+                        }}
+                      >
+                        <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── PASSWORD ── */}
+        {activeTab === 'password' && (
+          <form onSubmit={handleSaveSecurity} className="flex flex-col w-full" style={{ gap: '20px' }}>
+            <SectionHeader
+              title="Change Password"
+              description="Update your password to keep your account secure. Use a strong password with at least 6 characters."
+            />
+            <div className="flex flex-col w-full" style={{ gap: '16px' }}>
+              <Input
+                label="Current Password"
+                type="password"
+                placeholder="Enter current password"
+                value={currPassword}
+                onChange={(e) => setCurrPassword(e.target.value)}
+                required
+              />
+              <Input
+                label="New Password"
+                type="password"
+                placeholder="Enter new password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                helperText="Minimum 6 characters"
+              />
+              <Input
+                label="Confirm New Password"
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div style={{ paddingTop: '4px' }}>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                loading={savingPassword}
+                className="w-full sm:w-auto whitespace-nowrap"
+              >
+                Update Password
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* ── SESSIONS ── */}
+        {activeTab === 'sessions' && (
+          <div className="flex flex-col w-full" style={{ gap: '20px' }}>
+            <SectionHeader
+              title="Active Sessions"
+              description="Manage devices and browsers currently signed in. You can revoke access from any device."
+            />
+            <div className="flex flex-col w-full" style={{ gap: '10px' }}>
+              {sessions.map((session) => (
                 <div
-                  className="p-4 rounded-xl"
+                  key={session.id}
+                  className="flex items-start justify-between rounded-lg gap-3"
                   style={{
-                    background: 'var(--error-dim)',
-                    border: '1px solid var(--error-dim)',
+                    padding: '14px 16px',
+                    border: `1px solid ${session.current ? 'var(--border-hover)' : 'var(--border)'}`,
+                    background: session.current ? 'var(--bg-hover)' : 'var(--bg-subtle)',
                   }}
                 >
-                  <p className="text-[13px] mb-4" style={{ color: 'var(--fg-2)' }}>
-                    Any unsaved work will be lost. Are you sure you want to sign out?
+                  <div className="flex items-start min-w-0 flex-1" style={{ gap: '12px' }}>
+                    {/* Device Icon */}
+                    <div
+                      className="flex-shrink-0 flex items-center justify-center rounded-md"
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        background: session.current ? 'var(--bg)' : 'var(--bg-hover)',
+                        color: 'var(--fg-3)',
+                      }}
+                    >
+                      <Smartphone className="w-4 h-4" strokeWidth={2} />
+                    </div>
+
+                    {/* Session Details */}
+                    <div className="flex flex-col min-w-0 flex-1" style={{ gap: '6px' }}>
+                      <div className="flex items-center flex-wrap gap-2">
+                        <p
+                          className="text-xs md:text-sm font-medium truncate"
+                          style={{ color: 'var(--fg)', fontFamily: 'var(--font-sans)' }}
+                        >
+                          {session.device}
+                        </p>
+                        {session.current && (
+                          <span
+                            className="text-[9px] md:text-[10px] font-bold uppercase tracking-wider flex-shrink-0 whitespace-nowrap"
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              background: 'var(--bg)',
+                              color: 'var(--fg-2)',
+                              border: '1px solid var(--border)',
+                              letterSpacing: '0.05em',
+                            }}
+                          >
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        className="text-[11px] md:text-xs leading-relaxed"
+                        style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}
+                      >
+                        {session.location} · {session.status}
+                      </p>
+                    </div>
+                  </div>
+
+                  {!session.current && (
+                    <Button
+                      variant="danger"
+                      size="xs"
+                      onClick={() => handleRevokeSession(session.id, session.device)}
+                      className="flex-shrink-0 whitespace-nowrap"
+                    >
+                      Revoke
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── SIGN OUT ── */}
+        {activeTab === 'logout' && (
+          <div className="flex flex-col w-full" style={{ gap: '20px' }}>
+            <SectionHeader
+              title="Sign Out"
+              description="This will end your current session. Make sure you've saved all your work."
+            />
+            <div
+              className="rounded-lg"
+              style={{
+                padding: '16px 18px',
+                background: 'var(--bg-subtle)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <div className="flex items-start" style={{ gap: '14px', marginBottom: '16px' }}>
+                <div
+                  className="flex-shrink-0 flex items-center justify-center rounded-md"
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    background: 'var(--bg-hover)',
+                    color: 'var(--fg-3)',
+                  }}
+                >
+                  <LogOut className="w-4 h-4" strokeWidth={2} />
+                </div>
+                <div className="flex flex-col min-w-0 flex-1" style={{ gap: '6px' }}>
+                  <h4
+                    className="text-xs md:text-sm font-medium"
+                    style={{ color: 'var(--fg)', fontFamily: 'var(--font-sans)' }}
+                  >
+                    Are you sure you want to sign out?
+                  </h4>
+                  <p
+                    className="text-xs md:text-sm leading-relaxed"
+                    style={{ color: 'var(--fg-2)', fontFamily: 'var(--font-sans)' }}
+                  >
+                    Any unsaved changes will be lost. You'll need to sign in again.
                   </p>
-                  <Button onClick={onLogout} variant="danger" size="sm">
-                    Confirm sign out
-                  </Button>
                 </div>
               </div>
-            )}
+              <Button onClick={onLogout} variant="danger" size="sm" className="w-full">
+                Confirm Sign Out
+              </Button>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </AnimatePresence>
+  );
 
-          </motion.div>
-        </AnimatePresence>
+  return (
+    <div
+      className="flex flex-col md:flex-row w-full h-full"
+      style={{
+        fontFamily: 'var(--font-sans)',
+        background: 'var(--bg)',
+        overflow: 'hidden',
+      }}
+    >
+      {/* ── Desktop Sidebar Navigation ── */}
+      {!isMobile && (
+        <nav
+          className="hidden md:flex md:flex-col flex-shrink-0"
+          style={{
+            width: '192px',
+            padding: '20px 10px',
+            gap: '4px',
+            borderRight: '1px solid var(--border)',
+            background: 'var(--bg)',
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+          }}
+        >
+          <div
+            style={{
+              paddingLeft: '10px',
+              paddingBottom: '12px',
+              marginBottom: '8px',
+            }}
+          >
+            <p
+              className="text-xs font-semibold uppercase tracking-wider"
+              style={{
+                color: 'var(--fg-3)',
+                letterSpacing: '0.05em',
+              }}
+            >
+              · Account Settings
+            </p>
+          </div>
+
+          {tabs.map((tab) => {
+            const Icon     = tab.icon;
+            const isActive = activeTab === tab.id;
+            const isDanger = tab.id === 'logout';
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className="flex items-center rounded-lg text-left transition-all duration-150 cursor-pointer w-full"
+                style={{
+                  padding: '9px 10px',
+                  gap: '10px',
+                  minHeight: '38px',
+                  color: isDanger
+                    ? isActive ? 'var(--error)' : 'var(--fg-3)'
+                    : isActive ? 'var(--fg)' : 'var(--fg-3)',
+                  background: isActive ? 'var(--bg-hover)' : 'transparent',
+                  fontSize: '13px',
+                  fontWeight: isActive ? '600' : '500',
+                  border: `1px solid ${isActive ? 'var(--border)' : 'transparent'}`,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background   = 'var(--bg-subtle)';
+                    e.currentTarget.style.color        = isDanger ? 'var(--error)' : 'var(--fg-2)';
+                    e.currentTarget.style.borderColor  = 'var(--border)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background   = 'transparent';
+                    e.currentTarget.style.color        = isDanger ? 'var(--fg-3)' : 'var(--fg-3)';
+                    e.currentTarget.style.borderColor  = 'transparent';
+                  }
+                }}
+              >
+                <Icon
+                  className="flex-shrink-0"
+                  style={{
+                    width: '16px',
+                    height: '16px',
+                    color: isActive
+                      ? isDanger ? 'var(--error)' : 'var(--fg)'
+                      : 'var(--fg-3)',
+                  }}
+                  strokeWidth={2}
+                />
+                <span className="truncate text-[13px] min-w-0">{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
+      {/* ── Mobile Tab Accordion ── */}
+      {isMobile && (
+        <div
+          className="flex md:hidden flex-col w-full border-b flex-shrink-0"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--bg)',
+            padding: '8px 0',
+          }}
+        >
+          <button
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className="flex items-center justify-between w-full transition-all duration-150"
+            style={{
+              padding: '10px 16px',
+              gap: '8px',
+              color: 'var(--fg)',
+              fontSize: '13px',
+              fontWeight: '600',
+            }}
+          >
+            <span>· Account Settings</span>
+            <motion.div
+              animate={{ rotate: showMobileMenu ? 90 : 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ChevronRight className="w-4 h-4" strokeWidth={2} />
+            </motion.div>
+          </button>
+
+          <AnimatePresence>
+            {showMobileMenu && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex flex-col overflow-hidden"
+                style={{ gap: '4px', padding: '8px 12px 0' }}
+              >
+                {tabs.map((tab) => {
+                  const Icon     = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  const isDanger = tab.id === 'logout';
+
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => handleTabChange(tab.id)}
+                      className="flex items-center rounded-lg text-left transition-all duration-150 w-full active:scale-[0.98]"
+                      style={{
+                        padding: '10px 12px',
+                        gap: '10px',
+                        minHeight: '40px',
+                        color: isDanger
+                          ? isActive ? 'var(--error)' : 'var(--fg-3)'
+                          : isActive ? 'var(--fg)' : 'var(--fg-3)',
+                        background: isActive ? 'var(--bg-hover)' : 'transparent',
+                        fontSize: '13px',
+                        fontWeight: isActive ? '600' : '500',
+                        border: `1px solid ${isActive ? 'var(--border)' : 'transparent'}`,
+                      }}
+                    >
+                      <Icon
+                        className="flex-shrink-0"
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          color: isActive
+                            ? isDanger ? 'var(--error)' : 'var(--fg)'
+                            : 'var(--fg-3)',
+                        }}
+                        strokeWidth={2}
+                      />
+                      <span className="truncate text-sm">{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* ── Content Area — scrolls independently, height is driven by parent modal ── */}
+      <div
+        className="flex-1 overflow-y-auto overflow-x-hidden"
+        style={{
+          padding: isMobile ? '20px 16px' : '24px 28px',
+          overscrollBehavior: 'contain',
+        }}
+      >
+        {renderContent()}
       </div>
     </div>
   );
