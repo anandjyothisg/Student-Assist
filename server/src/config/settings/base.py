@@ -259,9 +259,6 @@ CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
         "LOCATION": os.environ.get("REDIS_URL", "redis://localhost:6379/2"),
-        "OPTIONS": {
-            "CLIENT_CLASS": "django.core.cache.backends.redis.RedisCache",
-        },
         "TIMEOUT": 300,  # 5 minutes default
     }
 }
@@ -283,6 +280,9 @@ CHROMA_COLLECTION_PREFIX = os.environ.get("CHROMA_COLLECTION_PREFIX", "smartstud
 RAG_CHUNK_SIZE = int(os.environ.get("RAG_CHUNK_SIZE", "1000"))
 RAG_CHUNK_OVERLAP = int(os.environ.get("RAG_CHUNK_OVERLAP", "200"))
 RAG_TOP_K_RESULTS = int(os.environ.get("RAG_TOP_K_RESULTS", "5"))
+
+# SentenceTransformer embedding model (used by embedder service)
+EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")
 
 # ---------------------------------------------------------------------------
 # File Upload Limits
@@ -322,26 +322,29 @@ LOGGING = {
             "formatter": "simple",
         },
         "file_general": {
-            "class": "logging.handlers.RotatingFileHandler",
+            "class": "logging.handlers.TimedRotatingFileHandler",
             "filename": LOG_DIR / "general.log",
-            "maxBytes": 10 * 1024 * 1024,  # 10 MB
+            "when": "midnight",
             "backupCount": 5,
             "formatter": "verbose",
+            "delay": True,
         },
         "file_errors": {
-            "class": "logging.handlers.RotatingFileHandler",
+            "class": "logging.handlers.TimedRotatingFileHandler",
             "filename": LOG_DIR / "errors.log",
-            "maxBytes": 10 * 1024 * 1024,  # 10 MB
+            "when": "midnight",
             "backupCount": 5,
             "formatter": "verbose",
+            "delay": True,
             "level": "ERROR",
         },
         "file_celery": {
-            "class": "logging.handlers.RotatingFileHandler",
+            "class": "logging.handlers.TimedRotatingFileHandler",
             "filename": LOG_DIR / "celery.log",
-            "maxBytes": 10 * 1024 * 1024,  # 10 MB
+            "when": "midnight",
             "backupCount": 3,
             "formatter": "verbose",
+            "delay": True,
         },
     },
     "loggers": {
@@ -372,19 +375,3 @@ LOGGING = {
         "level": "WARNING",
     },
 }
-
-# ---------------------------------------------------------------------------
-# AI / RAG Configuration
-# ---------------------------------------------------------------------------
-
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "qwen3")
-OLLAMA_EMBEDDING_MODEL = os.environ.get("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
-EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")
-CHROMA_DB_PATH = os.environ.get("CHROMA_DB_PATH") or str(BASE_DIR.parent / "chroma_db")
-CHROMA_COLLECTION_PREFIX = os.environ.get("CHROMA_COLLECTION_PREFIX", "smartstudent")
-RAG_CHUNK_SIZE = int(os.environ.get("RAG_CHUNK_SIZE", "1000"))
-RAG_CHUNK_OVERLAP = int(os.environ.get("RAG_CHUNK_OVERLAP", "200"))
-RAG_TOP_K_RESULTS = int(os.environ.get("RAG_TOP_K_RESULTS", "5"))
-MAX_DOCUMENT_SIZE_MB = int(os.environ.get("MAX_DOCUMENT_SIZE_MB", "50"))
-

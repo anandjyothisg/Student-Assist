@@ -298,16 +298,12 @@ function AppContent() {
           role: res.data.role || 'student',
           avatar: res.data.avatar || null,
         });
-      } catch (err) {
-        if (err.message === 'Network Error' || err.code === 'ERR_NETWORK') {
-          setUser({ username: 'DemoAdmin', email: 'admin@demo.com', role: 'admin' });
-        } else {
-          setUser(null);
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          setActiveTab('auth');
-          setAuthScreen('login');
-        }
+      } catch {
+        setUser(null);
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        setActiveTab('auth');
+        setAuthScreen('login');
       } finally {
         setLoadingUser(false);
       }

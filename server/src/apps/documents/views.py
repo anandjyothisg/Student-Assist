@@ -89,6 +89,17 @@ class DocumentViewSet(ModelViewSet):
 
         return qs.order_by("-created_at")
 
+    def create(self, request: Request, *args, **kwargs) -> Response:
+        """Override create to return DocumentListSerializer after upload for frontend compatibility."""
+        upload_serializer = DocumentUploadSerializer(
+            data=request.data, context={"request": request}
+        )
+        upload_serializer.is_valid(raise_exception=True)
+        self.perform_create(upload_serializer)
+        document = upload_serializer.instance
+        response_serializer = DocumentListSerializer(document, context={"request": request})
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
     def perform_create(self, serializer: DocumentUploadSerializer) -> None:
         course = serializer.validated_data.get("course")
         user = self.request.user

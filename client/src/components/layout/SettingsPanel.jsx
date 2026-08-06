@@ -90,7 +90,7 @@ export function SettingsPanel({ user, onLogout, onUpdateUser }) {
     if (newPassword.length < 6) { toast.warning('Password must be at least 6 characters.'); return; }
     setSavingPassword(true);
     try {
-      await mockAuthApi.changePassword(currPassword, newPassword);
+      await mockAuthApi.changePassword(currPassword, newPassword, confirmPassword);
       toast.success('Password updated.');
       setCurrPassword(''); setNewPassword(''); setConfirmPassword('');
     } catch (err) {

@@ -89,11 +89,9 @@ export function TeacherDashboard() {
       setCourses(prev => [...prev, res.data]);
       setSelectedCourse(res.data);
       toast.success(`Course ${res.data.code} created.`);
-    } catch {
-      const newCourse = { id: `c-${Date.now()}`, code: newCourseCode.trim().toUpperCase(), title: newCourseTitle.trim(), enrolled_count: 0 };
-      setCourses(prev => [...prev, newCourse]);
-      setSelectedCourse(newCourse);
-      toast.success(`Course ${newCourse.code} created.`);
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.response?.data?.error?.message || err.message || 'Failed to create course.';
+      toast.error(msg);
     } finally {
       setNewCourseCode('');
       setNewCourseTitle('');
@@ -122,21 +120,14 @@ export function TeacherDashboard() {
     formData.append('course', selectedCourse.id);
 
     try {
-      const res = await api.post('/documents/upload/', formData);
+      const res = await api.post('/documents/upload/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       setDocuments(prev => [res.data, ...prev]);
       toast.success(`Uploaded and indexed ${selectedFile.name}`);
-    } catch {
-      const newDoc = {
-        id: `doc-${Date.now()}`,
-        title: uploadTitle || selectedFile.name,
-        file_name: selectedFile.name,
-        status: 'indexed',
-        created_at: new Date().toISOString(),
-        chunks_count: 1,
-        size: `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB`
-      };
-      setDocuments(prev => [newDoc, ...prev]);
-      toast.success(`Uploaded and indexed ${selectedFile.name}`);
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.response?.data?.error?.message || err.message || 'Upload failed.';
+      toast.error(msg);
     } finally {
       setUploading(false);
       setSelectedFile(null);
@@ -156,8 +147,8 @@ export function TeacherDashboard() {
   };
 
   const filteredDocs = documents.filter(d =>
-    d.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    d.file_name.toLowerCase().includes(searchTerm.toLowerCase())
+    d.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (d.file_name || d.file_type || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const inputStyle = {
@@ -488,16 +479,21 @@ export function TeacherDashboard() {
                       </div>
                       <span
                         className="keycap"
-                        style={{ color: 'var(--success)', background: 'var(--success-dim)', borderColor: 'var(--success)', fontSize: '9px' }}
+                        style={{
+                          color: doc.processing_status === 'completed' ? 'var(--success)' : doc.processing_status === 'failed' ? 'var(--error)' : 'var(--fg-3)',
+                          background: doc.processing_status === 'completed' ? 'var(--success-dim)' : doc.processing_status === 'failed' ? 'var(--error-dim)' : 'var(--bg-subtle)',
+                          borderColor: doc.processing_status === 'completed' ? 'var(--success)' : doc.processing_status === 'failed' ? 'var(--error)' : 'var(--border)',
+                          fontSize: '9px'
+                        }}
                       >
-                        INDEXED
+                        {(doc.processing_status || 'pending').toUpperCase()}
                       </span>
                     </div>
 
                     <div className="flex flex-col gap-1">
                       <h4 className="font-medium truncate" style={{ fontSize: '12px', color: 'var(--fg)' }}>{doc.title}</h4>
                       <p className="font-mono" style={{ fontSize: '11px', color: 'var(--fg-3)' }}>
-                        {doc.file_name} · {doc.chunks_count || 12} vectors
+                        {doc.file_type?.toUpperCase()} · {doc.chunk_count ?? 0} vectors
                       </p>
                     </div>
 
@@ -505,7 +501,7 @@ export function TeacherDashboard() {
                       className="flex items-center justify-between pt-3"
                       style={{ borderTop: '1px solid var(--border)', fontSize: '11px', color: 'var(--fg-3)' }}
                     >
-                      <span>{doc.size || '2.4 MB'}</span>
+                      <span>{doc.file_size_mb != null ? `${doc.file_size_mb} MB` : '—'}</span>
                       <div className="flex items-center gap-1">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleReindexDoc(doc.id); }}

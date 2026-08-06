@@ -156,9 +156,12 @@ class PasswordChangeSerializer(serializers.Serializer):
     """
     Changes the authenticated user's password.
     Requires the current password for verification.
+
+    Field names match the frontend API call:
+        { old_password, new_password, confirm_password }
     """
 
-    current_password = serializers.CharField(
+    old_password = serializers.CharField(
         write_only=True,
         style={"input_type": "password"},
     )
@@ -168,21 +171,21 @@ class PasswordChangeSerializer(serializers.Serializer):
         style={"input_type": "password"},
         help_text="Minimum 8 characters.",
     )
-    confirm_new_password = serializers.CharField(
+    confirm_password = serializers.CharField(
         write_only=True,
         style={"input_type": "password"},
     )
 
-    def validate_current_password(self, value: str) -> str:
+    def validate_old_password(self, value: str) -> str:
         user: User = self.context["request"].user
         if not user.check_password(value):
             raise serializers.ValidationError("Current password is incorrect.")
         return value
 
     def validate(self, attrs: dict) -> dict:
-        if attrs["new_password"] != attrs["confirm_new_password"]:
+        if attrs["new_password"] != attrs["confirm_password"]:
             raise serializers.ValidationError(
-                {"confirm_new_password": "Passwords do not match."}
+                {"confirm_password": "Passwords do not match."}
             )
         validate_password(attrs["new_password"], user=self.context["request"].user)
         return attrs
@@ -192,3 +195,4 @@ class PasswordChangeSerializer(serializers.Serializer):
         user.set_password(self.validated_data["new_password"])
         user.save(update_fields=["password", "updated_at"])
         return user
+
