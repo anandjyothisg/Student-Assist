@@ -538,7 +538,7 @@ export function AskScreen({ user, onNavigate }) {
               <div className="mx-auto w-full max-w-[740px]">
                 {composer}
                 <div className="mt-2 flex items-center justify-between gap-3 px-1 text-xs text-fg-3">
-                  <span className="truncate">Answers come only from course materials and can still be wrong — check the sources.</span>
+                  <span className="truncate"><span className="hidden sm:inline">Answers come only from course materials and can still be wrong — </span>Check the sources before relying on an answer.</span>
                   {busy && (
                     <button onClick={() => abortRef.current?.abort()} className="inline-flex shrink-0 items-center gap-1 rounded-sm font-medium transition-colors hover:text-fg">
                       <X className="size-3.5" aria-hidden /> Stop

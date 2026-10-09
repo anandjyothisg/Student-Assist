@@ -27,7 +27,19 @@ load_dotenv(SERVER_DIR / ".env")
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
-ALLOWED_HOSTS: list[str] = os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")
+ALLOWED_HOSTS: list[str] = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()]
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    return os.environ.get(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
+# The older conversation-based assistant API and its generators have no UI and
+# duplicate /api/chat/; they stay unmounted unless explicitly enabled.
+ENABLE_LEGACY_ASSISTANT_API = env_flag("ENABLE_LEGACY_ASSISTANT_API", False)
+
+# OpenAPI schema / Swagger / ReDoc. Development turns this on; production keeps it off.
+ENABLE_API_DOCS = env_flag("ENABLE_API_DOCS", False)
 
 # ---------------------------------------------------------------------------
 # Installed Applications
@@ -188,6 +200,9 @@ REST_FRAMEWORK = {
         "password_reset_verify": "20/hour",
         # Asking the assistant runs an LLM — generous for real use, but bounded.
         "ai": os.environ.get("AI_THROTTLE_RATE", "40/min"),
+        # Re-indexing and extraction run the embedder / parsers on the server.
+        "indexing": os.environ.get("INDEXING_THROTTLE_RATE", "30/hour"),
+        "auth_refresh": "60/min",
     },
 }
 
@@ -208,7 +223,7 @@ SIMPLE_JWT = {
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
     "TOKEN_OBTAIN_SERIALIZER": "apps.accounts.auth_serializers.SmartStudentTokenObtainPairSerializer",
-    "TOKEN_REFRESH_SERIALIZER": "rest_framework_simplejwt.serializers.TokenRefreshSerializer",
+    "TOKEN_REFRESH_SERIALIZER": "apps.accounts.auth_serializers.SafeTokenRefreshSerializer",
 }
 
 # ---------------------------------------------------------------------------
@@ -331,9 +346,11 @@ EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en
 # File Upload Limits
 # ---------------------------------------------------------------------------
 
-# 50 MB max upload size
-DATA_UPLOAD_MAX_MEMORY_SIZE = 52_428_800
-FILE_UPLOAD_MAX_MEMORY_SIZE = 52_428_800
+# Non-file request bodies (JSON, form fields) are capped at 5 MB. Uploaded files
+# larger than 2.5 MB are spooled to a temporary file instead of held in memory;
+# the 50 MB document limit is enforced by MAX_DOCUMENT_SIZE_MB.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5_242_880
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2_621_440
 
 ALLOWED_DOCUMENT_EXTENSIONS = [".pdf", ".docx", ".pptx", ".txt"]
 MAX_DOCUMENT_SIZE_MB = int(os.environ.get("MAX_DOCUMENT_SIZE_MB", "50"))

@@ -535,7 +535,7 @@ export function TeacherDashboard() {
           <section className="flex min-w-0 flex-col gap-6" aria-label="Course">
             {!selected ? <Skeleton className="h-40" /> : (
               <>
-                <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-5 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone="accent" mono>{selected.code}</Badge>
@@ -544,8 +544,8 @@ export function TeacherDashboard() {
                     <h2 className="mt-2.5 text-xl font-semibold tracking-tight text-fg">{selected.title}</h2>
                     <p className="mt-1 max-w-[60ch] text-[13px] text-fg-3">{selected.description || selected.subject_name}</p>
                   </div>
-                  <div className="flex shrink-0 flex-col gap-3 sm:items-end">
-                    <dl className="grid grid-cols-3 gap-6 sm:text-right">
+                  <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 xl:flex-col xl:items-end">
+                    <dl className="grid grid-cols-3 gap-6 xl:text-right">
                       <div><dt className="text-xs text-fg-3">Students</dt><dd className="mt-0.5 text-lg font-semibold tabular text-fg">{selected.enrolled_count ?? 0}</dd></div>
                       <div><dt className="text-xs text-fg-3">Materials</dt><dd className="mt-0.5 text-lg font-semibold tabular text-fg">{docsState === 'ready' ? docs.length : '–'}</dd></div>
                       <div><dt className="text-xs text-fg-3">Ready</dt><dd className="mt-0.5 text-lg font-semibold tabular text-fg">{docsState === 'ready' ? counts.completed || 0 : '–'}</dd></div>
@@ -576,8 +576,8 @@ export function TeacherDashboard() {
                         onUploaded={(d) => { setDocs((list) => [d, ...list]); fetchCourses(selected.id); }} />
                     </div>
 
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-[15px] font-semibold text-fg">Units & topics</h3>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="whitespace-nowrap text-[15px] font-semibold text-fg">Units & topics</h3>
                       <div className="flex items-center gap-2">
                         {docs.length > 6 && <SearchInput icon={Search} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter files" aria-label="Filter files" className="w-40 sm:w-56" />}
                         <Button size="sm" variant="secondary" iconLeft={FolderPlus} onClick={() => setNameDialog({ mode: 'new-unit' })}>Add unit</Button>

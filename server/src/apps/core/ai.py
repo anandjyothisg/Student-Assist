@@ -82,3 +82,41 @@ def warm_up_model() -> bool:
     except Exception as exc:
         logger.warning(f"Model warm-up failed: {exc}")
         return False
+
+
+def parse_llm_json(text: str):
+    """
+    Parse JSON produced by a small local model. Handles code fences, leading prose
+    and the most common truncation (missing closing brackets at the end).
+    """
+    import json
+    import re
+
+    t = (text or "").strip()
+    t = re.sub(r"^```(?:json)?\s*|\s*```$", "", t)
+    start = min((i for i in (t.find("{"), t.find("[")) if i != -1), default=-1)
+    if start > 0:
+        t = t[start:]
+    try:
+        return json.loads(t)
+    except json.JSONDecodeError:
+        pass
+    # Close any brackets the model forgot, ignoring brackets inside strings.
+    stack, in_str, esc = [], False, False
+    for ch in t:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]" and stack:
+            stack.pop()
+    repaired = re.sub(r",\s*$", "", t) + "".join(reversed(stack))
+    return json.loads(repaired)

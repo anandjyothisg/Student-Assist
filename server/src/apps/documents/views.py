@@ -184,7 +184,7 @@ class DocumentViewSet(ModelViewSet):
                             new_root.is_latest = True
                             new_root.save(update_fields=["is_latest"])
 
-        logger.info(f"Document {doc_id} deleted by {request.user.email}")
+        logger.info(f"Document {doc_id} deleted by user {request.user.pk}")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(

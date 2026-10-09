@@ -157,6 +157,9 @@ def test_otp_lockout_after_max_attempts(api_client, student):
 
 
 def test_ai_ask_requires_authentication(api_client):
-    """Regression test: AiAskView must not be reachable without a valid JWT."""
-    res = api_client.post("/api/v1/ai/ask/", {"query": "test"}, format="json")
-    assert res.status_code == 401
+    """Regression test: the assistant endpoints must not be reachable without a valid JWT."""
+    for url in ("/api/chat/ask/", "/api/chat/ask/stream/"):
+        res = api_client.post(url, {"question": "test"}, format="json")
+        assert res.status_code == 401, url
+    # The legacy universal ask endpoint is not mounted unless explicitly enabled.
+    assert api_client.post("/api/v1/ai/ask/", {"query": "test"}, format="json").status_code == 404

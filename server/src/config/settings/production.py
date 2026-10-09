@@ -17,7 +17,11 @@ DEBUG = False
 # Security hardening
 # ---------------------------------------------------------------------------
 
-SECURE_BROWSER_XSS_FILTER = True
+if not ALLOWED_HOSTS:  # noqa: F405
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must list the public host name(s) in production.")
+
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_HSTS_SECONDS = 31_536_000          # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
@@ -28,6 +32,17 @@ CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# Behind a TLS-terminating reverse proxy (nginx, a load balancer) Django sees
+# plain HTTP; trust the proxy's header so SECURE_SSL_REDIRECT doesn't loop.
+# Only enable when the proxy always sets (and strips client-sent) X-Forwarded-Proto.
+if env_flag("TRUST_X_FORWARDED_PROTO", False):  # noqa: F405
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
+
+# Browsers may only call the API from the configured web origin(s).
+CORS_ALLOW_ALL_ORIGINS = False
 
 # ---------------------------------------------------------------------------
 # Database — PostgreSQL
@@ -54,7 +69,10 @@ DATABASES = {
 # ---------------------------------------------------------------------------
 
 MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")  # noqa: F405
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 # ---------------------------------------------------------------------------
 # Email — SMTP (e.g. SendGrid, Mailgun, AWS SES)

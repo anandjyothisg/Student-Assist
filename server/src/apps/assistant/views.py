@@ -781,7 +781,8 @@ class QuizGenerateView(APIView):
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": prompt}
                 ],
-                options={"temperature": 0.3}
+                options={"temperature": 0.3},
+                format="json",
             )
             content_str = response["message"]["content"].strip()
 
@@ -793,7 +794,8 @@ class QuizGenerateView(APIView):
                     lines = lines[:-1]
                 content_str = "\n".join(lines).strip()
 
-            parsed_json = json.loads(content_str)
+            from apps.core.ai import parse_llm_json
+            parsed_json = parse_llm_json(content_str)
         except json.JSONDecodeError as je:
             logger.error(f"Failed to parse MCQ JSON: {je}. Raw: {content_str}")
             return Response(
@@ -923,7 +925,8 @@ class FlashcardGenerateView(APIView):
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": prompt}
                 ],
-                options={"temperature": 0.3}
+                options={"temperature": 0.3},
+                format="json",
             )
             content_str = response["message"]["content"].strip()
 
@@ -935,7 +938,8 @@ class FlashcardGenerateView(APIView):
                     lines = lines[:-1]
                 content_str = "\n".join(lines).strip()
 
-            parsed_json = json.loads(content_str)
+            from apps.core.ai import parse_llm_json
+            parsed_json = parse_llm_json(content_str)
         except json.JSONDecodeError as je:
             logger.error(f"Failed to parse Flashcard JSON: {je}. Raw: {content_str}")
             return Response(
@@ -1076,7 +1080,8 @@ class VivaGenerateView(APIView):
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": prompt}
                 ],
-                options={"temperature": 0.3}
+                options={"temperature": 0.3},
+                format="json",
             )
             content_str = response["message"]["content"].strip()
 
@@ -1088,7 +1093,8 @@ class VivaGenerateView(APIView):
                     lines = lines[:-1]
                 content_str = "\n".join(lines).strip()
 
-            parsed_json = json.loads(content_str)
+            from apps.core.ai import parse_llm_json
+            parsed_json = parse_llm_json(content_str)
         except json.JSONDecodeError as je:
             logger.error(f"Failed to parse Viva JSON: {je}. Raw: {content_str}")
             return Response(
@@ -1229,7 +1235,8 @@ class ConceptExtractView(APIView):
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": prompt}
                 ],
-                options={"temperature": 0.2}
+                options={"temperature": 0.2},
+                format="json",
             )
             content_str = response["message"]["content"].strip()
 
@@ -1241,7 +1248,8 @@ class ConceptExtractView(APIView):
                     lines = lines[:-1]
                 content_str = "\n".join(lines).strip()
 
-            parsed_json = json.loads(content_str)
+            from apps.core.ai import parse_llm_json
+            parsed_json = parse_llm_json(content_str)
         except json.JSONDecodeError as je:
             logger.error(f"Failed to parse Concept JSON: {je}. Raw: {content_str}")
             return Response(
@@ -1372,7 +1380,8 @@ class GlossaryGenerateView(APIView):
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": prompt}
                 ],
-                options={"temperature": 0.2}
+                options={"temperature": 0.2},
+                format="json",
             )
             content_str = response["message"]["content"].strip()
 
@@ -1384,7 +1393,8 @@ class GlossaryGenerateView(APIView):
                     lines = lines[:-1]
                 content_str = "\n".join(lines).strip()
 
-            parsed_json = json.loads(content_str)
+            from apps.core.ai import parse_llm_json
+            parsed_json = parse_llm_json(content_str)
         except json.JSONDecodeError as je:
             logger.error(f"Failed to parse Glossary JSON: {je}. Raw: {content_str}")
             return Response(

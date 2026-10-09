@@ -3,7 +3,7 @@ import { BookOpen, Check, FileText, GraduationCap, LogOut, MessageCircle, Plus, 
 import api, { extractErrorMessage } from '../auth/api';
 import { useToast } from '../ui/Toast';
 import { PageHeader } from '../ui/PageHeader';
-import { Button } from '../ui/Button';
+import { Button, IconButton } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { SearchInput } from '../ui/Input';
 import { Modal } from '../ui/Modal';
@@ -30,9 +30,7 @@ function CourseCard({ c, enrolled, busy, onEnroll, onLeave, onNavigate }) {
           <>
             <Button size="sm" iconLeft={BookOpen} onClick={() => { try { localStorage.setItem('sources_course', c.id); } catch { /* ignore */ } onNavigate?.('documents'); }}>Open materials</Button>
             <Button size="sm" variant="ghost" iconLeft={MessageCircle} onClick={() => onNavigate?.('assistant')}>Ask</Button>
-            <Button size="sm" variant="ghost" iconLeft={LogOut} onClick={() => onLeave(c)} className="ml-auto text-fg-3" aria-label={`Leave ${c.title}`}>
-              <span className="hidden sm:inline">Leave</span>
-            </Button>
+            <IconButton icon={LogOut} label={`Leave ${c.title}`} size="sm" onClick={() => onLeave(c)} className="ml-auto" />
           </>
         ) : c.enrollment_open ? (
           <Button size="sm" variant="secondary" iconLeft={Plus} loading={busy} onClick={() => onEnroll(c)}>Enroll</Button>

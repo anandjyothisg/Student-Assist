@@ -14,6 +14,7 @@ SmartStudent AI — chat & assistant API.
     GET /api/v1/ai/scope/     courses the assistant can search for you
 """
 
+import json
 from collections import Counter, defaultdict
 from datetime import timedelta
 
@@ -23,6 +24,7 @@ from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import BaseRenderer, JSONRenderer
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
@@ -61,10 +63,24 @@ class ChatAskView(APIView):
         return Response(serialize_answer(session, msg), status=status.HTTP_200_OK)
 
 
+class EventStreamRenderer(BaseRenderer):
+    """Lets DRF accept `Accept: text/event-stream`; error payloads are rendered as JSON."""
+
+    media_type = "text/event-stream"
+    format = "sse"
+    charset = "utf-8"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        if isinstance(data, (bytes, str)):
+            return data
+        return json.dumps(data, default=str).encode("utf-8")
+
+
 class ChatAskStreamView(APIView):
     """Same as ChatAskView but streams the answer as server-sent events."""
 
     permission_classes = [IsAuthenticated]
+    renderer_classes = [JSONRenderer, EventStreamRenderer]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "ai"
 

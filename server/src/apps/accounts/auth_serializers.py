@@ -17,13 +17,31 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import PasswordResetOTP, User
 from apps.accounts.serializers import UserProfileSerializer
-from apps.accounts.services import generate_otp, send_password_reset_email
+from apps.accounts.services import generate_otp, mask_email, send_password_reset_email_async
+from django.db.models import F
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 
 logger = logging.getLogger("apps.accounts")
 
 # Generic, enumeration-safe error message — never reveals whether an
 # email/account exists.
 INVALID_OTP_MESSAGE = "Invalid or expired code."
+_DUMMY_OTP_HASH = make_password("000000")
+
+
+class SafeTokenRefreshSerializer(TokenRefreshSerializer):
+    """
+    simplejwt looks the user up with .get() and lets DoesNotExist escape as a
+    500 when the account was deleted. Treat that (and deactivated accounts)
+    as an invalid token instead.
+    """
+
+    def validate(self, attrs):
+        try:
+            return super().validate(attrs)
+        except User.DoesNotExist:
+            raise InvalidToken("Token is invalid or expired.")
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +144,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = User(role="student", **validated_data)
         user.set_password(password)
         user.save()
-        logger.info(f"New student account created: {user.email}")
+        logger.info(f"New student account created: {mask_email(user.email)}")
         return user
 
 
@@ -232,7 +250,10 @@ class ForgotPasswordSerializer(serializers.Serializer):
         try:
             user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
-            logger.info(f"[password_reset] Forgot-password requested for unknown email: {email}")
+            # Do the same hashing work as the real path so response time
+            # doesn't reveal whether the address has an account.
+            make_password(generate_otp())
+            logger.info("[password_reset] Forgot-password requested for an unknown email")
             return
 
         # Invalidate any prior unused codes for this user.
@@ -244,8 +265,8 @@ class ForgotPasswordSerializer(serializers.Serializer):
             otp_hash=make_password(otp),
             expires_at=timezone.now() + OTP_LIFETIME,
         )
-        send_password_reset_email(user, otp)
-        logger.info(f"[password_reset] OTP issued for: {user.email}")
+        send_password_reset_email_async(user, otp)
+        logger.info(f"[password_reset] OTP issued for: {mask_email(user.email)}")
 
 
 def _get_valid_otp_or_raise(email: str, otp: str) -> PasswordResetOTP:
@@ -257,6 +278,7 @@ def _get_valid_otp_or_raise(email: str, otp: str) -> PasswordResetOTP:
     try:
         user = User.objects.get(email__iexact=email.strip().lower())
     except User.DoesNotExist:
+        check_password(otp, _DUMMY_OTP_HASH)  # equal work for unknown emails
         raise serializers.ValidationError(INVALID_OTP_MESSAGE)
 
     otp_row = (
@@ -267,9 +289,14 @@ def _get_valid_otp_or_raise(email: str, otp: str) -> PasswordResetOTP:
     if not otp_row or not otp_row.is_valid():
         raise serializers.ValidationError(INVALID_OTP_MESSAGE)
 
+    # Reserve an attempt atomically *before* checking the code, so parallel
+    # guesses can't run past MAX_ATTEMPTS (a read-then-increment would race).
+    reserved = PasswordResetOTP.objects.filter(
+        pk=otp_row.pk, is_used=False, attempts__lt=PasswordResetOTP.MAX_ATTEMPTS
+    ).update(attempts=F("attempts") + 1, updated_at=timezone.now())
+    if not reserved:
+        raise serializers.ValidationError(INVALID_OTP_MESSAGE)
     if not check_password(otp, otp_row.otp_hash):
-        otp_row.attempts += 1
-        otp_row.save(update_fields=["attempts", "updated_at"])
         raise serializers.ValidationError(INVALID_OTP_MESSAGE)
 
     return otp_row
@@ -329,6 +356,6 @@ class ResetPasswordConfirmSerializer(serializers.Serializer):
         for token in OutstandingToken.objects.filter(user=user):
             BlacklistedToken.objects.get_or_create(token=token)
 
-        logger.info(f"[password_reset] Password reset completed for: {user.email}")
+        logger.info(f"[password_reset] Password reset completed for: {mask_email(user.email)}")
         return user
 

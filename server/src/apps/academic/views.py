@@ -65,7 +65,7 @@ class SubjectViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-        logger.info(f"Subject '{serializer.instance.code}' created by {self.request.user.email}")
+        logger.info(f"Subject '{serializer.instance.code}' created by user {self.request.user.pk}")
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -132,7 +132,7 @@ class CourseViewSet(ModelViewSet):
             serializer.save(teacher=self.request.user)
         else:
             serializer.save()
-        logger.info(f"Course '{serializer.instance.code}' created by {self.request.user.email}")
+        logger.info(f"Course '{serializer.instance.code}' created by user {self.request.user.pk}")
 
     def perform_update(self, serializer):
         if not can_manage_course(self.request.user, serializer.instance):
@@ -263,7 +263,7 @@ class EnrollmentViewSet(ModelViewSet):
             enrollment.save(update_fields=["is_active", "updated_at"])
         else:
             enrollment = Enrollment.objects.create(student=request.user, course=course)
-        logger.info(f"Student {request.user.email} enrolled in {course.code}")
+        logger.info(f"Student user {request.user.pk} enrolled in {course.code}")
         return Response(EnrollmentSerializer(enrollment, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
     def destroy(self, request: Request, *args, **kwargs) -> Response:

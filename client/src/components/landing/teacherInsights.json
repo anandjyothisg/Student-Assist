@@ -1,0 +1,145 @@
+{
+ "teacher": "Daniel Reyes",
+ "snapshot": "2026-10-09",
+ "periodDays": 90,
+ "totals": {
+  "questions": 22,
+  "active_students": 11,
+  "answered_rate": 1.0,
+  "saved_answers": 1
+ },
+ "daily": [
+  {
+   "date": "2026-09-26",
+   "count": 0
+  },
+  {
+   "date": "2026-09-27",
+   "count": 1
+  },
+  {
+   "date": "2026-09-28",
+   "count": 0
+  },
+  {
+   "date": "2026-09-29",
+   "count": 1
+  },
+  {
+   "date": "2026-09-30",
+   "count": 0
+  },
+  {
+   "date": "2026-10-01",
+   "count": 0
+  },
+  {
+   "date": "2026-10-02",
+   "count": 2
+  },
+  {
+   "date": "2026-10-03",
+   "count": 0
+  },
+  {
+   "date": "2026-10-04",
+   "count": 1
+  },
+  {
+   "date": "2026-10-05",
+   "count": 1
+  },
+  {
+   "date": "2026-10-06",
+   "count": 3
+  },
+  {
+   "date": "2026-10-07",
+   "count": 2
+  },
+  {
+   "date": "2026-10-08",
+   "count": 0
+  },
+  {
+   "date": "2026-10-09",
+   "count": 7
+  }
+ ],
+ "heatmap": [
+  {
+   "course_code": "AI-301",
+   "counts": [
+    0,
+    1,
+    0,
+    0,
+    3,
+    0,
+    2
+   ]
+  },
+  {
+   "course_code": "ML-302",
+   "counts": [
+    2,
+    3,
+    2,
+    0,
+    8,
+    0,
+    1
+   ]
+  }
+ ],
+ "top": [
+  {
+   "question": "How does gradient descent update the weights in linear regression?",
+   "count": 4,
+   "course_code": "ML-302"
+  },
+  {
+   "question": "What happens if the learning rate is too large?",
+   "count": 4,
+   "course_code": "ML-302"
+  },
+  {
+   "question": "Why is A* search optimal when the heuristic is admissible?",
+   "count": 2,
+   "course_code": "AI-301"
+  },
+  {
+   "question": "How does k-fold cross-validation work?",
+   "count": 1,
+   "course_code": "ML-302"
+  }
+ ],
+ "perCourse": [
+  {
+   "course_code": "AI-301",
+   "course_title": "Artificial Intelligence",
+   "questions": 6,
+   "students": 5,
+   "documents": 8,
+   "answered_rate": 1.0
+  },
+  {
+   "course_code": "ML-302",
+   "course_title": "Machine Learning",
+   "questions": 16,
+   "students": 8,
+   "documents": 8,
+   "answered_rate": 1.0
+  }
+ ],
+ "gaps": [
+  {
+   "question": "Can you explain how blockchain consensus algorithms work?",
+   "course": "All courses"
+  },
+  {
+   "question": "What is the syllabus for the quantum computing elective?",
+   "course": "CS-305"
+  }
+ ]
+}

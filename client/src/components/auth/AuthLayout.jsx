@@ -27,11 +27,11 @@ function AnswerPreview() {
   );
 }
 
-export function AuthLayout({ children }) {
+export function AuthLayout({ children, onHome }) {
   return (
     <div className="grid min-h-dvh bg-canvas lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
       <div className="flex flex-col px-5 py-6 sm:px-10 sm:py-8">
-        <Brand />
+        <a href="#/" onClick={onHome} className="self-start rounded-md" aria-label="AuraStudy home"><Brand /></a>
         <div className="flex flex-1 items-center justify-center py-10">
           <div className="w-full max-w-[380px]">{children}</div>
         </div>

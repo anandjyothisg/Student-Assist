@@ -6,6 +6,12 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _sync_email(settings):
+    """Send reset emails inline in tests so mail.outbox can be asserted."""
+    settings.PASSWORD_RESET_EMAIL_ASYNC = False
+
+
+@pytest.fixture(autouse=True)
 def _clear_cache():
     """
     DRF's ScopedRateThrottle stores request history in the Django cache.

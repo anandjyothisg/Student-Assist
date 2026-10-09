@@ -16,6 +16,8 @@ Endpoints:
 
 import logging
 
+from apps.accounts.services import mask_email
+
 from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -75,7 +77,7 @@ class RegisterView(APIView):
         refresh["full_name"] = user.get_full_name()
         refresh["is_staff"] = user.is_staff
 
-        logger.info(f"[register] New student registered: {user.email}")
+        logger.info(f"[register] New student registered: user {user.pk}")
 
         return Response(
             {
@@ -113,7 +115,7 @@ class LoginView(TokenObtainPairView):
         if response.status_code == status.HTTP_200_OK:
             # Log email from serializer (after validation)
             email = request.data.get("email", "unknown")
-            logger.info(f"[login] User authenticated: {email}")
+            logger.info(f"[login] User authenticated: {mask_email(email)}")
         return response
 
 
@@ -139,7 +141,7 @@ class LogoutView(APIView):
         serializer = LogoutSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        logger.info(f"[logout] User logged out: {request.user.email}")
+        logger.info(f"[logout] User logged out: user {request.user.pk}")
         return Response(
             {"detail": "Successfully logged out."},
             status=status.HTTP_200_OK,
@@ -162,7 +164,8 @@ class LogoutView(APIView):
 )
 class SmartStudentTokenRefreshView(TokenRefreshView):
     """POST /api/v1/auth/token/refresh/ — Rotate refresh token → new access token."""
-    pass
+
+    throttle_scope = "auth_refresh"
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +212,7 @@ class MeView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        logger.info(f"[me] Profile updated: {request.user.email}")
+        logger.info(f"[me] Profile updated: user {request.user.pk}")
         return Response(
             UserProfileSerializer(request.user, context={"request": request}).data
         )
@@ -241,7 +244,7 @@ class PasswordChangeView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        logger.info(f"[password_change] Password changed: {request.user.email}")
+        logger.info(f"[password_change] Password changed: user {request.user.pk}")
         return Response({"detail": "Password changed successfully."})
 
 
@@ -315,7 +318,7 @@ class ResetPasswordConfirmView(APIView):
         serializer = ResetPasswordConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        logger.info(f"[password_reset] Password reset via OTP: {user.email}")
+        logger.info(f"[password_reset] Password reset via OTP: user {user.pk}")
         return Response(
             {"detail": "Password has been reset. Please log in with your new password."},
             status=status.HTTP_200_OK,

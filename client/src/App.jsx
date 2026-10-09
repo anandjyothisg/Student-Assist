@@ -23,6 +23,7 @@ const Notebook = lazy(() => import('./components/notebook/Notebook').then((m) =>
 const AdminUsers = lazy(() => import('./components/admin/AdminUsers').then((m) => ({ default: m.AdminUsers })));
 const AdminCatalog = lazy(() => import('./components/admin/AdminCatalog').then((m) => ({ default: m.AdminCatalog })));
 const CoursesPage = lazy(() => import('./components/courses/CoursesPage').then((m) => ({ default: m.CoursesPage })));
+const Landing = lazy(() => import('./components/landing/Landing'));
 
 /* ─── Hash routing (#/notebook, #/documents?doc=…) — survives refresh & back/forward ─── */
 const readHashTab = () => readRoute().tab;
@@ -33,6 +34,23 @@ function writeHashTab(tab, { replace = false, params } = {}) {
   if (replace) window.history.replaceState(null, '', next);
   else window.history.pushState(null, '', next);
   window.dispatchEvent(new Event('routechange'));
+}
+
+/* Signed-out routes: each auth step has its own hash so back/forward work; anything else is the landing page. */
+const AUTH_SLUGS = {
+  login: 'signin',
+  register: 'register',
+  'forgot-password': 'forgot-password',
+  'otp-verification': 'verify',
+  'reset-password': 'reset-password',
+};
+const SLUG_TO_SCREEN = Object.fromEntries(Object.entries(AUTH_SLUGS).map(([screen, slug]) => [slug, screen]));
+const APP_TABS = new Set(['dashboard', 'academic', 'assistant', 'documents', 'courses', 'accounts', 'analytics', 'notebook']);
+
+function guestScreen(tab, hasEmail) {
+  const screen = SLUG_TO_SCREEN[tab] ?? (APP_TABS.has(tab) ? 'login' : null); // deep link into the app → sign in first
+  if ((screen === 'otp-verification' || screen === 'reset-password') && !hasEmail) return 'forgot-password';
+  return screen;
 }
 
 function mapUser(data) {
@@ -74,7 +92,7 @@ function AppContent() {
   const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [activeTab, setActiveTabState] = useState(readHashTab);
-  const [authScreen, setAuthScreen] = useState('login');
+  const [guestTab, setGuestTab] = useState(readHashTab);
   const [authEmail, setAuthEmail] = useState('');
   const [authOtp, setAuthOtp] = useState('');
 
@@ -108,7 +126,7 @@ function AppContent() {
         setUser(u);
         const requested = readHashTab();
         const tab = resolveTab(u.role, requested);
-        if (requested && requested !== tab) toast.error("You don't have access to that section.");
+        if (requested && requested !== tab && APP_TABS.has(requested)) toast.error("You don't have access to that section.");
         setActiveTabState(tab);
         writeHashTab(tab, { replace: true, params: requested === tab ? readRoute().params : {} });
       } catch {
@@ -129,7 +147,7 @@ function AppContent() {
       const requested = readHashTab();
       const tab = resolveTab(user.role, requested);
       if (requested && requested !== tab) {
-        toast.error("You don't have access to that section.");
+        if (APP_TABS.has(requested)) toast.error("You don't have access to that section.");
         writeHashTab(tab, { replace: true });
       }
       setActiveTabState(tab);
@@ -144,24 +162,57 @@ function AppContent() {
     };
   }, [user, resolveTab, toast]);
 
+  /* Signed-out navigation follows the hash too. */
+  useEffect(() => {
+    const onRoute = () => setGuestTab(readHashTab());
+    window.addEventListener('popstate', onRoute);
+    window.addEventListener('hashchange', onRoute);
+    window.addEventListener('routechange', onRoute);
+    return () => {
+      window.removeEventListener('popstate', onRoute);
+      window.removeEventListener('hashchange', onRoute);
+      window.removeEventListener('routechange', onRoute);
+    };
+  }, []);
+
+  const setAuthScreen = useCallback((screen, { replace = false } = {}) => {
+    const next = `#/${AUTH_SLUGS[screen] ?? 'signin'}`;
+    if (window.location.hash !== next) {
+      if (replace) window.history.replaceState(null, '', next);
+      else window.history.pushState(null, '', next);
+    }
+    setGuestTab(readHashTab());
+  }, []);
+
+  const openFromLanding = useCallback((screen) => {
+    setAuthScreen(screen);
+    window.scrollTo(0, 0);
+  }, [setAuthScreen]);
+
+  const goHome = useCallback((e) => {
+    e?.preventDefault();
+    window.history.pushState(null, '', window.location.pathname);
+    setGuestTab(null);
+    window.scrollTo(0, 0);
+  }, []);
+
   /* Token refresh failed somewhere — drop back to sign-in. */
   useEffect(() => {
     const onExpired = () => {
       setUser(null);
-      setAuthScreen('login');
+      setAuthScreen('login', { replace: true });
       toast.error('Your session expired. Please sign in again.');
     };
     window.addEventListener('auth-expired', onExpired);
     return () => window.removeEventListener('auth-expired', onExpired);
-  }, [toast]);
+  }, [toast, setAuthScreen]);
 
   const handleLogout = async () => {
     try {
       await mockAuthApi.logout();
     } finally {
       setUser(null);
-      setAuthScreen('login');
-      window.history.replaceState(null, '', window.location.pathname);
+      setAuthScreen('login', { replace: true });
       toast.success('You’ve been signed out.');
     }
   };
@@ -169,8 +220,16 @@ function AppContent() {
   if (loadingUser) return <FullScreenLoader />;
 
   if (!user) {
+    const authScreen = guestScreen(guestTab, !!authEmail);
+    if (!authScreen) {
+      return (
+        <Suspense fallback={<div className="min-h-dvh bg-canvas" />}>
+          <Landing onStart={openFromLanding} />
+        </Suspense>
+      );
+    }
     return (
-      <AuthLayout>
+      <AuthLayout onHome={goHome}>
         {authScreen === 'login' && <Login onNavigate={setAuthScreen} onLoginSuccess={signIn} />}
         {authScreen === 'register' && <Register onNavigate={setAuthScreen} onRegistered={signIn} />}
         {authScreen === 'forgot-password' && (

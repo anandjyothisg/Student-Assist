@@ -12,6 +12,7 @@ questions through the grounded RAG service.
 """
 
 import json
+import os
 import random
 import shutil
 import tempfile
@@ -31,13 +32,16 @@ from apps.core.utils import compute_file_hash
 from apps.documents.models import Document, DocumentStatus
 from apps.documents.services.dispatch import dispatch_processing
 
+# Demo-only credentials. They are published in the README, so this command
+# refuses to run anywhere but a local development/demo instance (see _guard).
+# Each can be overridden with an environment variable.
 DEMO_ACCOUNTS = {
-    "admin": {"email": "admin@aurastudy.demo", "password": "AuraAdmin#2026"},
-    "teacher": {"email": "teacher@aurastudy.demo", "password": "AuraTeach#2026"},
-    "student": {"email": "student@aurastudy.demo", "password": "AuraStudy#2026"},
+    "admin": {"email": "admin@aurastudy.demo", "password": os.environ.get("DEMO_ADMIN_PASSWORD", "AuraAdmin#2026")},
+    "teacher": {"email": "teacher@aurastudy.demo", "password": os.environ.get("DEMO_TEACHER_PASSWORD", "AuraTeach#2026")},
+    "student": {"email": "student@aurastudy.demo", "password": os.environ.get("DEMO_STUDENT_PASSWORD", "AuraStudy#2026")},
 }
-STAFF_PASSWORD = "AuraFaculty#2026"
-STUDENT_PASSWORD = "AuraLearner#2026"
+STAFF_PASSWORD = os.environ.get("DEMO_STAFF_PASSWORD", "AuraFaculty#2026")
+STUDENT_PASSWORD = os.environ.get("DEMO_LEARNER_PASSWORD", "AuraLearner#2026")
 
 SUBJECTS = {
     "ai-ds": ("AI-DS", "Artificial Intelligence & Data Science",
@@ -124,7 +128,22 @@ class Command(BaseCommand):
         parser.add_argument("--refresh-history", action="store_true", help="Delete and regenerate conversation history, saved answers and flashcards.")
 
     # ------------------------------------------------------------------
+    def _guard(self, opts):
+        env = os.environ.get("DJANGO_ENV", "development").strip().lower()
+        if not settings.DEBUG or env not in ("development", "dev", "demo"):
+            raise CommandError(
+                "seed_demo creates accounts with published passwords (including a superuser) and can erase data, "
+                "so it only runs on a local development/demo instance (DEBUG on, DJANGO_ENV=development or demo)."
+            )
+        engine = settings.DATABASES["default"]["ENGINE"]
+        if (opts["reset"] or opts["refresh_history"]) and not engine.endswith("sqlite3"):
+            raise CommandError(
+                "--reset and --refresh-history are only allowed on the SQLite dev database, where a file backup "
+                "is taken first. Back up and wipe other databases by hand."
+            )
+
     def handle(self, *args, **opts):
+        self._guard(opts)
         self.rng = random.Random(2026)
         content_dir = Path(settings.DEMO_CONTENT_DIR)
         manifests = sorted(content_dir.glob("*/manifest.json"))

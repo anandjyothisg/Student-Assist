@@ -1,0 +1,256 @@
+{
+ "model": "llama3.2 (3B) via Ollama",
+ "embedding": "BAAI/bge-small-en-v1.5",
+ "recordedOn": "2026-10-09",
+ "answers": [
+  {
+   "id": "pk",
+   "question": "What is a primary key?",
+   "status": "answered",
+   "answer": "A primary key is the candidate key chosen by the designer to identify tuples in a relation. Its attributes may not be NULL (entity integrity). [1]\n\nIn other words, a primary key is a minimal superkey that uniquely identifies each tuple in a relation, and it is used as the main identifier for each record.",
+   "seconds": 3.2,
+   "nearestDistance": 0.261,
+   "maxDistance": 0.45,
+   "reason": null,
+   "citations": [
+    {
+     "index": 1,
+     "course_code": "CS-305",
+     "document_title": "Relational Model and ER Modelling — Lecture Notes",
+     "unit": "Unit 1 · Relational Model and SQL",
+     "topic": "Relational Model and ER Modelling",
+     "page_number": 1,
+     "score": 0.8595,
+     "excerpt": "all attributes is always a superkey. • Candidate key: a minimal superkey; removing any attribute from it destroys uniqueness. • Primary key: the candidate key chosen by the designer to identify tuples. Its attributes may Ravi Menon · CS-305 Database Management Systems Page 1 of 4"
+    },
+    {
+     "index": 2,
+     "course_code": "CS-305",
+     "document_title": "Relational Model and ER Modelling — Lecture Notes",
+     "unit": "Unit 1 · Relational Model and SQL",
+     "topic": "Relational Model and ER Modelling",
+     "page_number": 2,
+     "score": 0.8558,
+     "excerpt": "not be NULL (entity integrity). • Alternate key: a candidate key not chosen as primary; usually enforced with a UNIQUE constraint. • Foreign key: a set of attributes in one relation whose values must match the primary key (or a unique key) of a referenced relation, or be NULL (referential integrity). • Composite key: a key with more than one attribute. Example Student(sid, email, name, dept) where both sid and ema"
+    },
+    {
+     "index": 3,
+     "course_code": "CS-305",
+     "document_title": "Relational Model and ER Modelling — Lecture Notes",
+     "unit": "Unit 1 · Relational Model and SQL",
+     "topic": "Relational Model and ER Modelling",
+     "page_number": 3,
+     "score": 0.8124,
+     "excerpt": "Derived attribute Usually not stored; computed in a query or view Weak entity set Table including the owner's primary key as a foreign key; primary key = owner key + partial key 1:1 relationship Foreign key in either table, preferably on the side with total participation, declared UNIQUE 1:N relationship Foreign key on the N side referencing the 1 side M:N relationship New table holding the foreign keys of both sides"
+    },
+    {
+     "index": 4,
+     "course_code": "CS-305",
+     "document_title": "Relational Model and ER Modelling — Lecture Notes",
+     "unit": "Unit 1 · Relational Model and SQL",
+     "topic": "Relational Model and ER Modelling",
+     "page_number": 3,
+     "score": 0.7869,
+     "excerpt": "• One-to-one (1:1): e.g. Department — managed by — Professor (each department has one head; each professor heads at most one department). • One-to-many (1:N): e.g. Department — offers — Course. • Many-to-many (M:N): e.g. Student — enrols in — Course. Participation is total if every entity must take part (double line; e.g. every course must be offered by some department) and partial otherwise. In (min, max) notatio"
+    },
+    {
+     "index": 5,
+     "course_code": "CS-305",
+     "document_title": "Storage, Indexing and B+ Trees — Lecture Notes",
+     "unit": "Unit 3 · Transactions, Concurrency and Storage",
+     "topic": "Indexing, Storage and Recovery",
+     "page_number": 1,
+     "score": 0.7728,
+     "excerpt": "Aspect Clustered (primary) index Non-clustered (secondary) index Physical order Data records stored in (approximately) index key order Data order independent of the index Number per table At most one Many Range query cost About one I/O per matching page Up to one I/O per matching record Example InnoDB tables are clustered on the primary key CREATE INDEX idx_name ON Student(name) Worked example. Student has 1,000,000"
+    }
+   ]
+  },
+  {
+   "id": "heap",
+   "question": "What does a heap guarantee?",
+   "status": "answered",
+   "answer": "A heap guarantees the Heap Property, which states that every node's key is either greater than or equal to (in a max-heap) or less than or equal to (in a min-heap) the keys of its children. This property orders each parent relative to its children only, and siblings are unordered.\n\n[1][2]",
+   "seconds": 3.6,
+   "nearestDistance": 0.258,
+   "maxDistance": 0.45,
+   "reason": null,
+   "citations": [
+    {
+     "index": 1,
+     "course_code": "CS-201",
+     "document_title": "Heaps and Priority Queues — Lecture Notes",
+     "unit": "Unit 2 · Trees, Heaps and Hashing",
+     "topic": "Heaps, Priority Queues and Hashing",
+     "page_number": 3,
+     "score": 0.8022,
+     "excerpt": "6. Priority Queues in Practice A priority queue ADT supports insert, peek and extract-min/max. The binary heap gives O(log n) for insert and extract and O(1) for peek. • Python's heapq module implements a min-heap on a plain list: heapq.heappush(h, x), heapq.heappop(h), heapq.heapify(lst) (O(n)). A max-heap is commonly simulated by pushing negated keys. • Java's PriorityQueue is also a min-heap by default. • To fi"
+    },
+    {
+     "index": 2,
+     "course_code": "CS-201",
+     "document_title": "Heaps and Priority Queues — Lecture Notes",
+     "unit": "Unit 2 · Trees, Heaps and Hashing",
+     "topic": "Heaps, Priority Queues and Hashing",
+     "page_number": 1,
+     "score": 0.7893,
+     "excerpt": "Heaps and Priority Queues Ananya Rao · CS-201 Data Structures and Algorithms CS-201 Data Structures and Algorithms · Unit 2 · Lecture Notes 1. The Heap Property A binary heap is a complete binary tree that satisfies the heap-order property: • Max-heap: every node's key is greater than or equal to the keys of its children, so the maximum is at the root. • Min-heap: every node's key is less than or equal to the keys"
+    },
+    {
+     "index": 3,
+     "course_code": "CS-201",
+     "document_title": "Shortest Paths and Minimum Spanning Trees — Worked Examples",
+     "unit": "Unit 3 · Algorithm Design and Graphs",
+     "topic": "Graph Algorithms",
+     "page_number": 2,
+     "score": 0.7843,
+     "excerpt": "2.1 Complexity With a binary heap there are V extract-min operations and up to E decrease-key (or push) operations, each O(log V), giving O((V + E) log V), usually written O(E log V) for connected graphs. 2.2 Worked example Directed edges: A→B 4, A→C 1, C→B 2, B→D 1, C→D 5, D→E 3. Source A. Shortest path to E: A → C → B → D → E, length 7. Note that the direct edge A→B (4) was improved to 3 via C. 2.3 Why negative edg"
+    },
+    {
+     "index": 4,
+     "course_code": "CS-201",
+     "document_title": "Sorting Algorithms — Lecture Notes",
+     "unit": "Unit 3 · Algorithm Design and Graphs",
+     "topic": "Sorting Algorithms and Asymptotic Analysis",
+     "page_number": 3,
+     "score": 0.756,
+     "excerpt": "tight inner loop and good cache behaviour. 3.3 Heapsort Build a max-heap in O(n), then repeatedly move the maximum to the end and sift down: Θ(n log n) in all cases, O(1) extra space, not stable (see the Unit 2 notes on heaps). 4. Comparison Table Algorithm Best Average Worst Extra space Stable Bubble sort (early exit) O(n) O(n2) O(n2) O(1) Yes Insertion sort O(n) O(n2) O(n2) O(1) Yes Selection sort O(n2) O(n2) O(n2)"
+    },
+    {
+     "index": 5,
+     "course_code": "CS-201",
+     "document_title": "Stacks and Queues — Lecture Notes",
+     "unit": "Unit 1 · Linear Data Structures",
+     "topic": "Stacks and Queues",
+     "page_number": 2,
+     "score": 0.7526,
+     "excerpt": "Implementation choices: Implementation insert extract-min Unsorted array O(1) O(n) Sorted array O(n) O(1) Binary heap O(log n) O(log n) The binary heap is the standard choice and is covered in Unit 2. 4. Application: Balanced Parentheses Scan the string left to right. Push every opening bracket; on a closing bracket, pop and check that it matches. The string is balanced if and only if no mismatch occurs and the stack"
+    }
+   ]
+  },
+  {
+   "id": "bcnf",
+   "question": "What is BCNF?",
+   "status": "answered",
+   "answer": "BCNF stands for Boyce-Codd Normal Form. It is a normal form that requires every non-trivial functional dependency to have a key as its determinant.\n\n[1][2][3]",
+   "seconds": 2.4,
+   "nearestDistance": 0.362,
+   "maxDistance": 0.45,
+   "reason": null,
+   "citations": [
+    {
+     "index": 1,
+     "course_code": "CS-305",
+     "document_title": "Functional Dependencies and Normal Forms — Lecture Notes",
+     "unit": "Unit 2 · Database Design and Query Processing",
+     "topic": "Functional Dependencies and Normal Forms",
+     "page_number": 3,
+     "score": 0.7584,
+     "excerpt": "lossless. 5. 3NF versus BCNF BCNF is stricter. A relation can be in 3NF but not in BCNF when a non-superkey determines a prime attribute. Example. Teach(student, course, instructor) where each instructor teaches exactly one course, and for each course a student has one instructor: • student, course → instructor • instructor → course Candidate keys: {student, course} and {student, instructor}. All three attributes a"
+    },
+    {
+     "index": 2,
+     "course_code": "CS-305",
+     "document_title": "Functional Dependencies and Normal Forms — Lecture Notes",
+     "unit": "Unit 2 · Database Design and Query Processing",
+     "topic": "Functional Dependencies and Normal Forms",
+     "page_number": 3,
+     "score": 0.7317,
+     "excerpt": "2NF check. sid → sname and cid → ctitle, instructor are partial dependencies on the key (and office depends on cid transitively). Not in 2NF. Decompose: • Student(sid, sname) • Course(cid, ctitle, instructor, office) • Enrolment(sid, cid, marks) 3NF check. In Course, instructor → office has a determinant that is not a superkey, and office is not prime: a transitive dependency cid → instructor → office. Decompose C"
+    },
+    {
+     "index": 3,
+     "course_code": "CS-305",
+     "document_title": "Functional Dependencies and Normal Forms — Lecture Notes",
+     "unit": "Unit 2 · Database Design and Query Processing",
+     "topic": "Functional Dependencies and Normal Forms",
+     "page_number": 2,
+     "score": 0.7094,
+     "excerpt": "A prime attribute is one that belongs to some candidate key. 3. Normal Forms Normal form Condition (for every non-trivial FD X → A, unless stated) Removes 1NF All attribute values are atomic; no repeating groups Multivalued cells 2NF 1NF, and no non-prime attribute depends on a proper subset of a candidate key Partial dependencies 3NF X is a superkey, or A is prime Transitive dependencies BCNF X is a superkey All FD-"
+    },
+    {
+     "index": 4,
+     "course_code": "CS-305",
+     "document_title": "Functional Dependencies and Normal Forms — Lecture Notes",
+     "unit": "Unit 2 · Database Design and Query Processing",
+     "topic": "Functional Dependencies and Normal Forms",
+     "page_number": 3,
+     "score": 0.6935,
+     "excerpt": "(synthesis algorithm using a minimal cover). • A BCNF decomposition that is lossless always exists, but it may not preserve dependencies. 6. Properties of Decompositions 6.1 Lossless join Decomposing R into R1 and R2 is lossless if joining R1 and R2 always reproduces exactly R, with no spurious tuples. Test for a binary decomposition: R1 ∩ R2 → R1 or R1 ∩ R2 → R2 must be in F+ that is, the common attributes must be"
+    }
+   ]
+  },
+  {
+   "id": "gd",
+   "question": "What is gradient descent?",
+   "status": "answered",
+   "answer": "Gradient Descent (GD) is an optimization algorithm used to minimize the cost function J in machine learning models, particularly in linear regression and logistic regression. It iteratively updates the model parameters θ in the direction of steepest decrease of J, with a step size controlled by the learning rate α.\n\nAccording to [1] and [2], GD works by computing the partial derivatives ∂J/∂θj and updating θ using the gradient descent update rule: θj := θj - α (1/m) Σ_i (h_θ(x^(i)) - y^(i)) x_j^(i).\n\nThe learning rate α plays a crucial role in determining the convergence of GD. If α is too small, convergence can be very slow; if α is too large, J may oscillate or diverge.\n\n[4] provides an example implementation of gradient descent using Python, where the update rule is applied simultaneously for all j: θj := θj - α (1/m) Σ_i (h_θ(x^(i)) - y^(i)) x_j^(i).\n\nIn summary, gradient descent is a fundamental algorithm in machine learning that minimizes the cost function by iteratively updating model parameters in the direction of steepest decrease.",
+   "seconds": 9.5,
+   "nearestDistance": 0.225,
+   "maxDistance": 0.45,
+   "reason": null,
+   "citations": [
+    {
+     "index": 1,
+     "course_code": "ML-302",
+     "document_title": "Gradient Descent Worked Example",
+     "unit": "Unit 1 · Supervised Learning",
+     "topic": "Linear and Logistic Regression",
+     "page_number": 1,
+     "score": 0.8946,
+     "excerpt": "Gradient Descent Worked Example Daniel Reyes · ML-302 Machine Learning This handout traces batch gradient descent by hand on a tiny linear-regression problem, checks the answer against the normal equation, and explains why some learning rates diverge. Reproduce every number with a calculator before the tutorial. 1. Problem Set-up Three training examples with one feature: Model: h(x) = θ0 + θ1 x. Cost (m = 3): J(θ0, θ"
+    },
+    {
+     "index": 2,
+     "course_code": "ML-302",
+     "document_title": "Linear and Logistic Regression — Lecture Notes",
+     "unit": "Unit 1 · Supervised Learning",
+     "topic": "Linear and Logistic Regression",
+     "page_number": 1,
+     "score": 0.8613,
+     "excerpt": "pseudo-inverse, or add L2 regularisation. 2.3 Gradient descent Gradient descent iteratively moves θ in the direction of steepest decrease of J. The partial derivative is ∂J/∂θj = (1/m) Σ_i (h_θ(x^(i)) - y^(i)) x_j^(i) Daniel Reyes · ML-302 Machine Learning Page 1 of 4"
+    },
+    {
+     "index": 3,
+     "course_code": "ML-302",
+     "document_title": "Gradient Descent Worked Example",
+     "unit": "Unit 1 · Supervised Learning",
+     "topic": "Linear and Logistic Regression",
+     "page_number": 4,
+     "score": 0.8347,
+     "excerpt": "Observations: J decreases monotonically: 6.33 → 1.28 → 0.28 → 0.082 → 0.042, approaching J* = 0.0278. Gradient magnitudes shrink as θ approaches the minimum, so steps automatically get smaller even though α is fixed. θ0 overshoots its final value (0.57 versus 0.33) while θ1 is still catching up. Because x is not centred, the two parameters are strongly coupled, and the descent path curves along a long narrow valley."
+    },
+    {
+     "index": 4,
+     "course_code": "ML-302",
+     "document_title": "Linear and Logistic Regression — Lecture Notes",
+     "unit": "Unit 1 · Supervised Learning",
+     "topic": "Linear and Logistic Regression",
+     "page_number": 2,
+     "score": 0.8274,
+     "excerpt": "giving the update rule, applied simultaneously for all j: θj := θj - α (1/m) Σ_i (h_θ(x^(i)) - y^(i)) x_j^(i) In vector form: θ := θ - (α/m) XT(Xθ - y). import numpy as np def gradient_descent(X, y, alpha=0.01, iters=1000): m, n = X.shape theta = np.zeros(n) for _ in range(iters): grad = X.T @ (X @ theta - y) / m theta -= alpha * grad return theta Learning rate α: • Too small: converg"
+    },
+    {
+     "index": 5,
+     "course_code": "ML-302",
+     "document_title": "Neural Network Fundamentals — Lecture Notes",
+     "unit": "Unit 3 · Unsupervised Learning and Neural Networks",
+     "topic": "Neural Network Fundamentals",
+     "page_number": 2,
+     "score": 0.8264,
+     "excerpt": "3. Activation Functions Dying ReLU: a unit whose input is negative for every training example outputs 0 and receives zero gradient, so it never recovers. Causes include a large learning rate or a large negative bias. Leaky ReLU, ELU and careful initialisation mitigate it. 4. Backpropagation Training minimises a loss L by gradient descent; backpropagation computes all gradients efficiently by applying the chain rule b"
+    }
+   ]
+  },
+  {
+   "id": "worldcup",
+   "question": "Who won the 2018 FIFA World Cup?",
+   "status": "not_found",
+   "answer": "I couldn't find this in your course materials. Try rephrasing the question, choose a specific course, or ask your teacher to add material on this topic.",
+   "seconds": 0.3,
+   "nearestDistance": 0.467,
+   "maxDistance": 0.45,
+   "reason": "no_passages",
+   "citations": []
+  }
+ ]
+}

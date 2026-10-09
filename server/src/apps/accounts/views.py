@@ -144,7 +144,7 @@ class MeViewSet(GenericViewSet):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        logger.info(f"User {request.user.email} updated their profile.")
+        logger.info(f"User {request.user.pk} updated their profile.")
         return Response(
             UserProfileSerializer(request.user, context={"request": request}).data
         )
