@@ -2,6 +2,8 @@ import time
 import json
 import logging
 import ollama
+
+from apps.core.ai import get_ollama_client
 from django.conf import settings
 from django.db import transaction
 from apps.documents.models import Document, DocumentChunk
@@ -30,7 +32,7 @@ def query_ollama_json(system_instruction, prompt, temperature=0.3):
     """
     Performs LLM call expecting JSON output.
     """
-    client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+    client = get_ollama_client()
     response = client.chat(
         model=settings.OLLAMA_LLM_MODEL,
         messages=[
@@ -85,7 +87,7 @@ class AssistantOrchestrator:
         )
         
         llm_model = settings.OLLAMA_LLM_MODEL
-        client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+        client = get_ollama_client()
         start_time = time.perf_counter()
         response = client.chat(
             model=llm_model,
@@ -109,7 +111,7 @@ class AssistantOrchestrator:
 
     @staticmethod
     def generate_quiz(user, course_id, document_ids, difficulty, question_count):
-        docs_qs = Document.objects.filter(course_id=course_id, processing_status="completed")
+        docs_qs = Document.objects.filter(course_id=course_id, processing_status="completed", is_latest=True)
         if document_ids:
             docs_qs = docs_qs.filter(id__in=document_ids)
         docs = list(docs_qs)
@@ -223,7 +225,7 @@ class AssistantOrchestrator:
 
     @staticmethod
     def generate_viva(user, course_id, document_ids, level, count):
-        docs_qs = Document.objects.filter(course_id=course_id, processing_status="completed")
+        docs_qs = Document.objects.filter(course_id=course_id, processing_status="completed", is_latest=True)
         if document_ids:
             docs_qs = docs_qs.filter(id__in=document_ids)
         docs = list(docs_qs)

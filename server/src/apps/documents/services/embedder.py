@@ -3,22 +3,26 @@ SmartStudent AI — Sentence Embedding Service
 """
 
 import logging
+import threading
 from sentence_transformers import SentenceTransformer
 from django.conf import settings
 
 logger = logging.getLogger("apps.documents")
 
 _model_instance = None
+_model_lock = threading.Lock()
 
 
 def get_embedding_model() -> SentenceTransformer:
-    """Retrieves or initialises the singleton SentenceTransformer instance."""
+    """Retrieves or initialises the singleton SentenceTransformer instance (thread-safe)."""
     global _model_instance
     if _model_instance is None:
-        model_name = settings.EMBEDDING_MODEL_NAME
-        logger.info(f"Loading SentenceTransformer model: {model_name}")
-        _model_instance = SentenceTransformer(model_name)
-        logger.info("SentenceTransformer model loaded successfully.")
+        with _model_lock:
+            if _model_instance is None:
+                model_name = settings.EMBEDDING_MODEL_NAME
+                logger.info(f"Loading SentenceTransformer model: {model_name}")
+                _model_instance = SentenceTransformer(model_name)
+                logger.info("SentenceTransformer model loaded successfully.")
     return _model_instance
 
 

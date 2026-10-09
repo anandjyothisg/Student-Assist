@@ -146,8 +146,14 @@ class CourseWriteSerializer(serializers.ModelSerializer):
 
     def validate_teacher(self, value):
         request = self.context.get("request")
-        if value is not None and request and not request.user.is_admin:
-            raise serializers.ValidationError("Only administrators can assign a course to a teacher.")
+        if request and not request.user.is_admin:
+            # Covers null too: a teacher must not be able to orphan their own course.
+            if self.instance is None:
+                allowed = value is None or value == request.user  # create: the view assigns the requester
+            else:
+                allowed = value == self.instance.teacher
+            if not allowed:
+                raise serializers.ValidationError("Only administrators can change a course's teacher.")
         if value is not None and value.role not in ("teacher", "admin"):
             raise serializers.ValidationError("A course can only be assigned to a teacher.")
         return value

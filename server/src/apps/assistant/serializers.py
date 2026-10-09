@@ -112,13 +112,11 @@ class ConversationCreateSerializer(serializers.ModelSerializer):
         fields = ("course", "title")
 
     def validate_course(self, course):
+        from apps.core.access import can_read_course
+
         request = self.context.get("request")
-        if request and request.user.is_student:
-            enrolled = request.user.enrollments.filter(course=course, is_active=True).exists()
-            if not enrolled:
-                raise serializers.ValidationError(
-                    "You are not enrolled in this course."
-                )
+        if not request or not can_read_course(request.user, course):
+            raise serializers.ValidationError("You don't have access to this course.")
         return course
 
 
@@ -179,7 +177,7 @@ class QuizGenerateInputSerializer(serializers.Serializer):
 
 class FlashcardGenerateInputSerializer(serializers.Serializer):
     document_id = serializers.UUIDField(required=True)
-    count = serializers.IntegerField(required=False, default=5)
+    count = serializers.IntegerField(required=False, default=5, min_value=1, max_value=30)
 
 
 class VivaGenerateInputSerializer(serializers.Serializer):
@@ -190,7 +188,7 @@ class VivaGenerateInputSerializer(serializers.Serializer):
         default=list
     )
     level = serializers.ChoiceField(choices=["basic", "intermediate", "advanced"], required=True)
-    count = serializers.IntegerField(required=False, default=5)
+    count = serializers.IntegerField(required=False, default=5, min_value=1, max_value=30)
 
 
 class ConceptExtractInputSerializer(serializers.Serializer):

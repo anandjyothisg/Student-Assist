@@ -13,6 +13,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.core.utils import parse_uuid_param
 from apps.academic.models import Course, Enrollment, Subject, Topic, Unit
 from apps.academic.serializers import (
     CourseDetailSerializer,
@@ -31,9 +32,7 @@ from apps.core.permissions import IsAdmin, IsAdminOrTeacher
 logger = logging.getLogger("apps.academic")
 
 
-def can_manage_course(user, course: Course) -> bool:
-    """Admins manage every course; teachers only the courses they teach."""
-    return bool(user.is_admin or (user.is_teacher and course.teacher_id == user.id))
+from apps.core.access import can_manage_course  # noqa: E402  (shared rule)
 
 
 class SubjectViewSet(ModelViewSet):
@@ -119,7 +118,7 @@ class CourseViewSet(ModelViewSet):
             scope = self.request.query_params.get("scope")
             qs = qs.filter(teacher=user) if scope == "mine" else qs.filter(Q(is_published=True) | Q(teacher=user))
 
-        subject = self.request.query_params.get("subject")
+        subject = parse_uuid_param(self.request.query_params.get("subject"), "subject")
         if subject:
             qs = qs.filter(subject__code__iexact=subject)
         if self.request.query_params.get("enrolled") == "true" and user.is_student:
@@ -294,7 +293,7 @@ class UnitViewSet(ModelViewSet):
             qs = qs.filter(course__is_published=True)
         elif user.is_teacher:
             qs = qs.filter(Q(course__is_published=True) | Q(course__teacher=user))
-        course = self.request.query_params.get("course")
+        course = parse_uuid_param(self.request.query_params.get("course"), "course")
         if course:
             qs = qs.filter(course_id=course)
         return qs
@@ -337,7 +336,7 @@ class TopicViewSet(ModelViewSet):
             qs = qs.filter(unit__course__is_published=True)
         elif user.is_teacher:
             qs = qs.filter(Q(unit__course__is_published=True) | Q(unit__course__teacher=user))
-        unit = self.request.query_params.get("unit")
+        unit = parse_uuid_param(self.request.query_params.get("unit"), "unit")
         if unit:
             qs = qs.filter(unit_id=unit)
         return qs

@@ -1,7 +1,12 @@
 import axios from 'axios';
 
-// Load base URL from environment config (defaults to django port 8000)
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Load base URL from environment config.
+// In development: set VITE_API_URL=http://localhost:8000 in client/.env
+// In production (Cloudflare Pages): set VITE_API_URL in the dashboard env vars.
+// Falls back to localhost:8000 ONLY in dev mode so production builds never
+// silently target the visitor's own machine.
+const API_BASE = import.meta.env.VITE_API_URL
+  || (import.meta.env.DEV ? 'http://localhost:8000' : '');
 
 const api = axios.create({
   baseURL: `${API_BASE}/api/v1`,

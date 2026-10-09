@@ -265,7 +265,7 @@ function SourceLattice({ reduce }) {
   );
 }
 
-export function Hero({ onStart }) {
+export function Hero({ onStart, signedIn = false }) {
   const reduce = useReducedMotion();
   const ref = useRef(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] });
@@ -320,7 +320,7 @@ export function Hero({ onStart }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.55, ease: EASE }}
           >
-            <Button size="xl" iconRight={ArrowRight} onClick={() => onStart('register')}>Create account</Button>
+            <Button size="xl" iconRight={ArrowRight} onClick={() => onStart('register')}>{signedIn ? 'Open app' : 'Create account'}</Button>
             <a href="#lab" className="landing-ghost-link inline-flex h-12 items-center gap-2 rounded-lg px-4 text-[15px] font-medium text-fg-2 transition-colors hover:text-fg">
               See it answer <ArrowDown className="size-4" aria-hidden />
             </a>

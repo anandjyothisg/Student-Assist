@@ -31,6 +31,15 @@ def broker_available() -> bool:
             ok = True
     except OSError:
         ok = False
+    if ok:
+        # A reachable broker isn't enough: with no worker consuming, documents
+        # would sit in "Queued" forever. Require a worker to answer a ping.
+        try:
+            from config.celery import app
+
+            ok = bool(app.control.ping(timeout=1.0))
+        except Exception:
+            ok = False
     _broker_cache.update(at=now, ok=ok)
     return ok
 

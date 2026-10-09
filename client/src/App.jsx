@@ -126,9 +126,12 @@ function AppContent() {
         setUser(u);
         const requested = readHashTab();
         const tab = resolveTab(u.role, requested);
-        if (requested && requested !== tab && APP_TABS.has(requested)) toast.error("You don't have access to that section.");
         setActiveTabState(tab);
-        writeHashTab(tab, { replace: true, params: requested === tab ? readRoute().params : {} });
+        // The bare URL always opens the landing page, signed in or not.
+        if (requested) {
+          if (requested !== tab && APP_TABS.has(requested)) toast.error("You don't have access to that section.");
+          writeHashTab(tab, { replace: true, params: requested === tab ? readRoute().params : {} });
+        }
       } catch {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
@@ -145,6 +148,7 @@ function AppContent() {
     const onHash = () => {
       if (!user) return;
       const requested = readHashTab();
+      if (!requested) return; // back to the landing page
       const tab = resolveTab(user.role, requested);
       if (requested && requested !== tab) {
         if (APP_TABS.has(requested)) toast.error("You don't have access to that section.");
@@ -212,7 +216,10 @@ function AppContent() {
       await mockAuthApi.logout();
     } finally {
       setUser(null);
-      setAuthScreen('login', { replace: true });
+      // Signing out returns to the landing page.
+      window.history.replaceState(null, '', window.location.pathname);
+      setGuestTab(null);
+      window.scrollTo(0, 0);
       toast.success('You’ve been signed out.');
     }
   };
@@ -242,6 +249,15 @@ function AppContent() {
           <ResetPassword onNavigate={setAuthScreen} email={authEmail} otp={authOtp} />
         )}
       </AuthLayout>
+    );
+  }
+
+  if (!guestTab) {
+    const openApp = () => { setActiveTab(resolveTab(user.role, null)); window.scrollTo(0, 0); };
+    return (
+      <Suspense fallback={<div className="min-h-dvh bg-canvas" />}>
+        <Landing onStart={openApp} signedIn />
+      </Suspense>
     );
   }
 

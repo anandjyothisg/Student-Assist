@@ -26,7 +26,7 @@ import { useSmoothScroll } from './useSmoothScroll';
  *   Roles / Under the hood   supporting facts, as screens and numbers
  *   Close     the thread ties off on the call to action
  */
-export default function Landing({ onStart }) {
+export default function Landing({ onStart, signedIn = false }) {
   useSmoothScroll();
   /* In-page anchors scroll without touching the hash, which the app uses for routing. */
   const onClick = (e) => {
@@ -58,9 +58,9 @@ export default function Landing({ onStart }) {
         >
           Skip to content
         </a>
-        <LandingNav onStart={onStart} />
+        <LandingNav onStart={onStart} signedIn={signedIn} />
         <main id="main" className="relative">
-          <Hero onStart={onStart} />
+          <Hero onStart={onStart} signedIn={signedIn} />
           <ThreadBand />
           <ProblemScene />
           <Stitch height={120} />
@@ -71,7 +71,7 @@ export default function Landing({ onStart }) {
           <CourseShelf />
           <Vantage />
           <UnderTheHood />
-          <Closing onStart={onStart} />
+          <Closing onStart={onStart} signedIn={signedIn} />
         </main>
         <LandingFooter />
       </div>

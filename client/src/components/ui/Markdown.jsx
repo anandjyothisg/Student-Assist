@@ -36,6 +36,7 @@ function CodeBlock({ lang, code }) {
 const INLINE = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*\s][^*]*\*|_[^_\s][^_]*_|\[[^\]]+\]\([^)\s]+\)|\[\d{1,2}\](?!\())/g;
 
 let citeHandler = null; // set per render by <Markdown onCite>
+let citeValid = null; // optional: which [n] markers point at a real source
 
 function inline(text, keyBase = 'i') {
   if (!text) return null;
@@ -47,6 +48,8 @@ function inline(text, keyBase = 'i') {
     if (cite) {
       const n = Number(cite[1]);
       const handler = citeHandler;
+      // A marker with no matching source is shown as plain text, never as a dead chip.
+      if (citeValid && !citeValid(n)) return <React.Fragment key={k}>{p}</React.Fragment>;
       return handler ? (
         <button key={k} type="button" className="cite-chip" onClick={() => handler(n)} aria-label={`Source ${n}`}>{n}</button>
       ) : (
@@ -132,10 +135,11 @@ function parseBlocks(src) {
   return blocks;
 }
 
-export function Markdown({ children, className = '', onCite }) {
+export function Markdown({ children, className = '', onCite, isCiteValid }) {
   const text = typeof children === 'string' ? children : '';
   const blocks = parseBlocks(text);
   citeHandler = onCite || null;
+  citeValid = isCiteValid || null;
 
   return (
     <div className={`prose-ai ${className}`}>

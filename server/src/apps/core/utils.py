@@ -113,3 +113,81 @@ def error_response(message: str, code: str = "ERROR", details: Any = None) -> di
         "success": False,
         "error": {"code": code, "message": message, "details": details},
     }
+
+
+def parse_uuid_param(value, name: str = "id"):
+    """Validate a UUID query parameter; a malformed value is a 400, not a 500."""
+    import uuid
+
+    from rest_framework.exceptions import ValidationError
+
+    if value in (None, ""):
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        raise ValidationError({name: "Must be a valid id."})
+
+
+def parse_int_param(value, name: str, default: int, lo: int, hi: int) -> int:
+    """Clamp an integer query parameter; a malformed value is a 400, not a 500."""
+    from rest_framework.exceptions import ValidationError
+
+    if value in (None, ""):
+        return default
+    try:
+        return max(lo, min(hi, int(value)))
+    except (ValueError, TypeError):
+        raise ValidationError({name: "Must be a whole number."})
+
+
+# Uploaded OOXML files are zip archives; reject archives that would expand to
+# something absurd when the parser opens them (zip bombs).
+MAX_ARCHIVE_ENTRIES = 5000
+MAX_ARCHIVE_UNCOMPRESSED_MB = 300
+
+
+def sniff_document(file_obj, ext: str) -> str | None:
+    """
+    Check that the file's content matches its extension. Returns an error
+    message for the user, or None when the content looks right. The extension
+    alone is not trusted: a renamed executable or HTML file is rejected here.
+    """
+    import zipfile
+
+    pos = file_obj.tell() if hasattr(file_obj, "tell") else 0
+    try:
+        file_obj.seek(0)
+        head = file_obj.read(8192)
+        if not head:
+            return "The file is empty."
+        if ext == ".pdf":
+            if b"%PDF-" not in head[:1024]:
+                return "This file isn't a valid PDF."
+            return None
+        if ext in (".docx", ".pptx"):
+            file_obj.seek(0)
+            if not zipfile.is_zipfile(file_obj):
+                return f"This file isn't a valid {ext[1:].upper()} document."
+            file_obj.seek(0)
+            with zipfile.ZipFile(file_obj) as zf:
+                infos = zf.infolist()
+                names = {i.filename for i in infos}
+                if len(infos) > MAX_ARCHIVE_ENTRIES or sum(i.file_size for i in infos) > MAX_ARCHIVE_UNCOMPRESSED_MB * 1024 * 1024:
+                    return "This document is too large to process once unpacked."
+                marker = "word/document.xml" if ext == ".docx" else "ppt/presentation.xml"
+                if "[Content_Types].xml" not in names or marker not in names:
+                    return f"This file isn't a valid {ext[1:].upper()} document."
+            return None
+        if ext in (".txt", ".md"):
+            if b"\x00" in head and not head.startswith((b"\xff\xfe", b"\xfe\xff")):
+                return "This file doesn't look like plain text."
+            return None
+        return None
+    except zipfile.BadZipFile:
+        return f"This file isn't a valid {ext[1:].upper()} document."
+    finally:
+        try:
+            file_obj.seek(pos)
+        except Exception:
+            pass

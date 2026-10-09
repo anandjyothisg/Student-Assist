@@ -3,6 +3,7 @@ SmartStudent AI — Assistant Views
 """
 
 import logging
+import uuid
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
@@ -13,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, GenericViewSet
 from rest_framework import mixins
 
+from apps.core.utils import parse_uuid_param
 from apps.assistant.models import Conversation, GeneratedContent, Message, MessageRole
 from apps.assistant.serializers import (
     ConversationCreateSerializer,
@@ -23,6 +25,8 @@ from apps.assistant.serializers import (
     MessageCreateSerializer,
     MessageSerializer,
 )
+from apps.core.access import can_read_course, can_read_course_id, can_read_document
+from apps.core.ai import get_ollama_client
 from apps.core.pagination import SmallPagination, StandardPagination
 from apps.core.permissions import IsAdminOrTeacher, IsStudent
 from apps.assistant.services.rag_pipeline import run_rag_query
@@ -67,11 +71,12 @@ class ConversationViewSet(
         if user.is_student:
             qs = qs.filter(student=user, is_active=True)
         elif user.is_teacher:
-            # Teachers can monitor conversations in their courses
-            qs = qs.filter(course__teacher=user)
+            # Teachers can monitor conversations in their courses, but not ones
+            # the student deleted.
+            qs = qs.filter(course__teacher=user, is_active=True)
         # Admins see all
 
-        course_id = self.request.query_params.get("course")
+        course_id = parse_uuid_param(self.request.query_params.get("course"), "course")
         if course_id:
             qs = qs.filter(course_id=course_id)
 
@@ -114,9 +119,12 @@ class ConversationViewSet(
         """
         conversation = self.get_object()
 
-        # Only the conversation owner (student) can ask
+        # Only the conversation owner (student) can ask, and only while they
+        # can still read the course (enrolled, course published).
         if conversation.student != request.user and not request.user.is_admin:
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+        if not can_read_course(request.user, conversation.course):
+            return Response({"detail": "You no longer have access to this course."}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = MessageCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -197,7 +205,7 @@ class ConversationViewSet(
         except Exception as e:
             logger.exception(f"Semantic retrieval failed: {e}")
             return Response(
-                {"detail": f"Failed to perform semantic retrieval: {str(e)}"},
+                {"detail": f"Failed to perform semantic retrieval. The details were logged; please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -247,7 +255,7 @@ class ConversationViewSet(
         except Exception as e:
             logger.exception(f"Prompt construction failed: {e}")
             return Response(
-                {"detail": f"Failed to build prompt: {str(e)}"},
+                {"detail": f"Failed to build prompt. The details were logged; please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -336,7 +344,7 @@ class ConversationViewSet(
         except Exception as e:
             logger.exception(f"Citation generation failed: {e}")
             return Response(
-                {"detail": f"Failed to generate citations: {str(e)}"},
+                {"detail": f"Failed to generate citations. The details were logged; please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -433,7 +441,7 @@ class ConversationViewSet(
                 answer = fallback_answer
             else:
                 llm_model = settings.OLLAMA_LLM_MODEL
-                client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+                client = get_ollama_client()
                 
                 response = client.chat(
                     model=llm_model,
@@ -457,7 +465,7 @@ class ConversationViewSet(
         except Exception as e:
             logger.exception(f"RAG query pipeline execution failed: {e}")
             return Response(
-                {"detail": f"Failed to execute RAG query pipeline: {str(e)}"},
+                {"detail": f"Failed to execute RAG query pipeline. The details were logged; please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -509,7 +517,7 @@ class GeneratedContentViewSet(
             qs = qs.filter(content_type=content_type)
         if self.request.query_params.get("mine") == "true":
             qs = qs.filter(created_by=user)
-        course_id = self.request.query_params.get("course")
+        course_id = parse_uuid_param(self.request.query_params.get("course"), "course")
         if course_id:
             qs = qs.filter(course_id=course_id)
 
@@ -577,6 +585,7 @@ class DocumentSummarizeView(APIView):
     Provides summary generation for course documents.
     """
     permission_classes = [IsAuthenticated]
+    throttle_scope = "ai"
 
     def post(self, request, *args, **kwargs):
         serializer = DocumentSummarizeInputSerializer(data=request.data)
@@ -597,7 +606,7 @@ class DocumentSummarizeView(APIView):
         # 2. Check permissions
         user = request.user
         if user.is_student:
-            if not Enrollment.objects.filter(student=user, course=document.course, is_active=True).exists():
+            if not can_read_document(user, document):
                 return Response(
                     {"detail": "You do not have permission to access this document's course."},
                     status=status.HTTP_403_FORBIDDEN
@@ -652,7 +661,7 @@ class DocumentSummarizeView(APIView):
         
         start_time = time.perf_counter()
         try:
-            client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+            client = get_ollama_client()
             response = client.chat(
                 model=llm_model,
                 messages=[
@@ -683,6 +692,7 @@ class QuizGenerateView(APIView):
     Generates structured MCQs from course document context.
     """
     permission_classes = [IsAuthenticated]
+    throttle_scope = "ai"
 
     def post(self, request, *args, **kwargs):
         serializer = QuizGenerateInputSerializer(data=request.data)
@@ -696,7 +706,7 @@ class QuizGenerateView(APIView):
         # 1. Permission checks
         user = request.user
         if user.is_student:
-            if not Enrollment.objects.filter(student=user, course_id=course_id, is_active=True).exists():
+            if not can_read_course_id(user, course_id):
                 return Response(
                     {"detail": "You do not have permission to generate quizzes for this course."},
                     status=status.HTTP_403_FORBIDDEN
@@ -715,7 +725,7 @@ class QuizGenerateView(APIView):
             )
 
         # 2. Retrieve completed documents
-        docs_qs = Document.objects.filter(course_id=course_id, processing_status="completed")
+        docs_qs = Document.objects.filter(course_id=course_id, processing_status="completed", is_latest=True)
         if document_ids:
             docs_qs = docs_qs.filter(id__in=document_ids)
         docs = list(docs_qs)
@@ -774,7 +784,7 @@ class QuizGenerateView(APIView):
         
         start_time = time.perf_counter()
         try:
-            client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+            client = get_ollama_client()
             response = client.chat(
                 model=llm_model,
                 messages=[
@@ -837,6 +847,7 @@ class FlashcardGenerateView(APIView):
     Generates structured flashcards from document context.
     """
     permission_classes = [IsAuthenticated]
+    throttle_scope = "ai"
 
     def post(self, request, *args, **kwargs):
         serializer = FlashcardGenerateInputSerializer(data=request.data)
@@ -857,7 +868,7 @@ class FlashcardGenerateView(APIView):
         # 2. Check permissions
         user = request.user
         if user.is_student:
-            if not Enrollment.objects.filter(student=user, course=document.course, is_active=True).exists():
+            if not can_read_document(user, document):
                 return Response(
                     {"detail": "You do not have permission to access this document's course."},
                     status=status.HTTP_403_FORBIDDEN
@@ -918,7 +929,7 @@ class FlashcardGenerateView(APIView):
         
         start_time = time.perf_counter()
         try:
-            client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+            client = get_ollama_client()
             response = client.chat(
                 model=llm_model,
                 messages=[
@@ -979,6 +990,7 @@ class VivaGenerateView(APIView):
     Generates structured viva prep questions from course documents context.
     """
     permission_classes = [IsAuthenticated]
+    throttle_scope = "ai"
 
     def post(self, request, *args, **kwargs):
         serializer = VivaGenerateInputSerializer(data=request.data)
@@ -992,7 +1004,7 @@ class VivaGenerateView(APIView):
         # 1. Permission checks
         user = request.user
         if user.is_student:
-            if not Enrollment.objects.filter(student=user, course_id=course_id, is_active=True).exists():
+            if not can_read_course_id(user, course_id):
                 return Response(
                     {"detail": "You do not have permission to generate viva questions for this course."},
                     status=status.HTTP_403_FORBIDDEN
@@ -1011,7 +1023,7 @@ class VivaGenerateView(APIView):
             )
 
         # 2. Retrieve completed documents
-        docs_qs = Document.objects.filter(course_id=course_id, processing_status="completed")
+        docs_qs = Document.objects.filter(course_id=course_id, processing_status="completed", is_latest=True)
         if document_ids:
             docs_qs = docs_qs.filter(id__in=document_ids)
         docs = list(docs_qs)
@@ -1073,7 +1085,7 @@ class VivaGenerateView(APIView):
         
         start_time = time.perf_counter()
         try:
-            client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+            client = get_ollama_client()
             response = client.chat(
                 model=llm_model,
                 messages=[
@@ -1135,6 +1147,7 @@ class ConceptExtractView(APIView):
     Extracts key concepts, definitions, formula references, keywords, and page references from a document.
     """
     permission_classes = [IsAuthenticated]
+    throttle_scope = "ai"
 
     def post(self, request, *args, **kwargs):
         serializer = ConceptExtractInputSerializer(data=request.data)
@@ -1154,7 +1167,7 @@ class ConceptExtractView(APIView):
         # 2. Check permissions
         user = request.user
         if user.is_student:
-            if not Enrollment.objects.filter(student=user, course=document.course, is_active=True).exists():
+            if not can_read_document(user, document):
                 return Response(
                     {"detail": "You do not have permission to access this document's course."},
                     status=status.HTTP_403_FORBIDDEN
@@ -1228,7 +1241,7 @@ class ConceptExtractView(APIView):
         
         start_time = time.perf_counter()
         try:
-            client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+            client = get_ollama_client()
             response = client.chat(
                 model=llm_model,
                 messages=[
@@ -1293,6 +1306,7 @@ class GlossaryGenerateView(APIView):
     Generates a structured glossary (term, definition, example, page) from a document.
     """
     permission_classes = [IsAuthenticated]
+    throttle_scope = "ai"
 
     def post(self, request, *args, **kwargs):
         serializer = GlossaryGenerateInputSerializer(data=request.data)
@@ -1312,7 +1326,7 @@ class GlossaryGenerateView(APIView):
         # 2. Check permissions
         user = request.user
         if user.is_student:
-            if not Enrollment.objects.filter(student=user, course=document.course, is_active=True).exists():
+            if not can_read_document(user, document):
                 return Response(
                     {"detail": "You do not have permission to access this document's course."},
                     status=status.HTTP_403_FORBIDDEN
@@ -1373,7 +1387,7 @@ class GlossaryGenerateView(APIView):
         
         start_time = time.perf_counter()
         try:
-            client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+            client = get_ollama_client()
             response = client.chat(
                 model=llm_model,
                 messages=[
@@ -1441,6 +1455,7 @@ class LearningAnalyticsView(APIView):
     Can be filtered by course_id.
     """
     permission_classes = [IsAuthenticated]
+    throttle_scope = "ai"
 
     def get(self, request, *args, **kwargs):
         user = request.user
@@ -1469,10 +1484,25 @@ class LearningAnalyticsView(APIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-        # 2. Scope filters for Chat messages
+        # 2. Scope. A teacher only sees the student's activity in the courses
+        # that teacher teaches, never other teachers' courses or all-course chats.
+        from apps.academic.models import Course
         from apps.chat.models import ChatMessage, ChatSession
-        
-        chat_sessions_qs = ChatSession.objects.filter(student=student)
+
+        scope_courses = None
+        if user.is_teacher and student != user:
+            scope_courses = {str(c) for c in Course.objects.filter(teacher=user).values_list("id", flat=True)}
+        if course_id:
+            try:
+                course_id = str(uuid.UUID(str(course_id)))
+            except ValueError:
+                return Response({"detail": "course_id must be a valid id."}, status=status.HTTP_400_BAD_REQUEST)
+            if scope_courses is not None and course_id not in scope_courses:
+                return Response({"detail": "You can only view analytics for your own courses."}, status=status.HTTP_403_FORBIDDEN)
+
+        chat_sessions_qs = ChatSession.objects.filter(student=student, is_active=True)
+        if scope_courses is not None:
+            chat_sessions_qs = chat_sessions_qs.filter(course_id__in=scope_courses)
         if course_id:
             chat_sessions_qs = chat_sessions_qs.filter(course_id=course_id)
         
@@ -1487,6 +1517,8 @@ class LearningAnalyticsView(APIView):
         
         # Also sum response times from generated content if possible
         generated_qs = GeneratedContent.objects.filter(created_by=student)
+        if scope_courses is not None:
+            generated_qs = generated_qs.filter(course_id__in=scope_courses)
         if course_id:
             generated_qs = generated_qs.filter(course_id=course_id)
         

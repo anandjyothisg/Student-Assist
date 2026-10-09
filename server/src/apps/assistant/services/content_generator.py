@@ -5,6 +5,8 @@ SmartStudent AI — AI Study Aid Content Generator Service
 import json
 import logging
 import ollama
+
+from apps.core.ai import get_ollama_client
 from django.conf import settings
 from django.db import transaction
 
@@ -30,7 +32,7 @@ def generate_content(validated_data: dict, user) -> GeneratedContent:
     instructions = validated_data.get("instructions", "")
 
     # Retrieve documents to use as context
-    docs_qs = Document.objects.filter(course_id=course_id, processing_status="completed")
+    docs_qs = Document.objects.filter(course_id=course_id, processing_status="completed", is_latest=True)
     if document_ids:
         docs_qs = docs_qs.filter(id__in=document_ids)
         
@@ -124,7 +126,7 @@ def generate_content(validated_data: dict, user) -> GeneratedContent:
     logger.info(f"Triggering Ollama LLM to generate {content_type} content.")
     
     try:
-        client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+        client = get_ollama_client()
         response = client.chat(
             model=settings.OLLAMA_LLM_MODEL,
             messages=[

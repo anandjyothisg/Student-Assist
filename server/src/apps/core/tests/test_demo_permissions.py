@@ -89,8 +89,9 @@ def test_student_cannot_ask_about_a_course_they_are_not_in(world):
     s = client_for(world["s1"])
     res = s.post("/api/chat/ask/", {"question": "what is in course two?", "course_id": str(world["c2"].id)}, format="json")
     assert res.status_code == 403
+    # The legacy universal ask endpoint is not mounted by default.
     res = s.post("/api/v1/ai/ask/", {"query": "what is in course two?", "course_id": str(world["c2"].id)}, format="json")
-    assert res.status_code == 403
+    assert res.status_code == 404
 
 
 def test_conversations_are_private(world):
@@ -169,9 +170,16 @@ def test_teacher_roster_and_insights_are_scoped(world):
 
 
 def test_teacher_cannot_read_unrelated_student_analytics(world):
-    t2 = client_for(world["t2"])
-    res = t2.get("/api/assistant/analytics/", {"student_id": str(world["s1"].id)})
-    assert res.status_code == 403
+    # The analytics route is unmounted by default; its view must still be safe
+    # if ENABLE_LEGACY_ASSISTANT_API is turned on, so call the view directly.
+    from rest_framework.test import APIRequestFactory, force_authenticate
+
+    from apps.assistant.views import LearningAnalyticsView
+
+    assert client_for(world["t2"]).get("/api/assistant/analytics/").status_code == 404
+    req = APIRequestFactory().get("/x", {"student_id": str(world["s1"].id)})
+    force_authenticate(req, user=world["t2"])
+    assert LearningAnalyticsView.as_view()(req).status_code == 403
 
 
 # ---------------------------------------------------------------- admins

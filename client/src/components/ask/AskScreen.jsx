@@ -138,6 +138,25 @@ function ScopePicker({ courses, value, onChange, locked }) {
 }
 
 /* ─── One assistant answer ─────────────────────────────────────────────── */
+function SourceList({ items, onCite, muted = false }) {
+  return (
+    <ol className="flex flex-wrap gap-2">
+      {items.map((c, i) => (
+        <li key={c.chunk_id || i} className="max-w-full">
+          <button
+            onClick={() => onCite(c)}
+            className={`group inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-surface py-1.5 pr-2.5 pl-1.5 text-left text-[12.5px] transition-colors hover:border-border-strong ${muted ? 'opacity-80' : ''}`}
+          >
+            <span className={`inline-flex size-5 shrink-0 items-center justify-center rounded-sm font-mono text-[11px] font-semibold ${muted ? 'bg-subtle text-fg-3' : 'bg-accent-dim text-accent'}`}>{c.index || i + 1}</span>
+            <span className="truncate font-medium text-fg-2 group-hover:text-fg">{c.document_title}</span>
+            <span className="shrink-0 font-mono text-[11px] text-fg-3">{c.course_code} · p.{c.page_number}</span>
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function Answer({ msg, onCite, onRetry }) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
@@ -150,6 +169,12 @@ function Answer({ msg, onCite, onRetry }) {
 
   const notFound = msg.status === 'not_found';
   const offline = msg.status === 'model_unavailable';
+  const all = msg.citations ?? [];
+  const byIndex = (n) => all.find((c) => (c.index ?? all.indexOf(c) + 1) === n);
+  // Final answers flag which passages they actually cite; older answers have no flag.
+  const sources = all.filter((c) => c.cited !== false);
+  const alsoRetrieved = all.filter((c) => c.cited === false);
+  const sourcesLabel = offline ? 'Matching passages' : sources.length ? 'Sources' : null;
 
   const save = async () => {
     setSaving(true);
@@ -169,8 +194,8 @@ function Answer({ msg, onCite, onRetry }) {
       <div className="flex items-center gap-2.5">
         <BrandMark size={22} />
         <span className="text-[13px] font-semibold text-fg">AuraStudy</span>
-        {msg.citations?.length > 0 && !notFound && (
-          <span className="text-xs text-fg-3">· {msg.citations.length} {msg.citations.length === 1 ? 'source' : 'sources'}</span>
+        {sources.length > 0 && !notFound && !msg.streaming && (
+          <span className="text-xs text-fg-3">· {sources.length} {sources.length === 1 ? 'source' : 'sources'}</span>
         )}
       </div>
 
@@ -193,28 +218,32 @@ function Answer({ msg, onCite, onRetry }) {
                 The AI model is offline — showing matching passages instead of a written answer.
               </div>
             )}
-            <Markdown onCite={(n) => onCite(msg.citations?.[n - 1])}>{offline ? msg.content.split('\n').slice(1).join('\n') : msg.content}</Markdown>
+            <Markdown onCite={(n) => onCite(byIndex(n))} isCiteValid={(n) => !!byIndex(n)}>{offline ? msg.content.split('\n').slice(1).join('\n') : msg.content}</Markdown>
             {msg.streaming && <span className="ai-cursor" aria-hidden />}
           </>
         )}
 
-        {!notFound && msg.citations?.length > 0 && !msg.streaming && (
+        {!notFound && all.length > 0 && !msg.streaming && (
           <div className="mt-4">
-            <p className="mb-2 text-xs font-medium text-fg-3">Sources</p>
-            <ol className="flex flex-wrap gap-2">
-              {msg.citations.map((c, i) => (
-                <li key={c.chunk_id || i} className="max-w-full">
-                  <button
-                    onClick={() => onCite(c)}
-                    className="group inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-surface py-1.5 pr-2.5 pl-1.5 text-left text-[12.5px] transition-colors hover:border-border-strong"
-                  >
-                    <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm bg-accent-dim font-mono text-[11px] font-semibold text-accent">{c.index || i + 1}</span>
-                    <span className="truncate font-medium text-fg-2 group-hover:text-fg">{c.document_title}</span>
-                    <span className="shrink-0 font-mono text-[11px] text-fg-3">{c.course_code} · p.{c.page_number}</span>
-                  </button>
-                </li>
-              ))}
-            </ol>
+            {sourcesLabel && (
+              <>
+                <p className="mb-2 text-xs font-medium text-fg-3">{sourcesLabel}</p>
+                <SourceList items={sources} onCite={onCite} />
+              </>
+            )}
+            {!offline && !sources.length && (
+              <p className="mb-2 text-xs text-fg-3">This answer didn’t cite specific passages. Check it against the retrieved material below.</p>
+            )}
+            {alsoRetrieved.length > 0 && (
+              sources.length ? (
+                <details className="mt-3 text-xs text-fg-3">
+                  <summary className="cursor-pointer select-none font-medium hover:text-fg-2">Also retrieved, not cited ({alsoRetrieved.length})</summary>
+                  <div className="mt-2"><SourceList items={alsoRetrieved} onCite={onCite} muted /></div>
+                </details>
+              ) : (
+                <SourceList items={alsoRetrieved} onCite={onCite} muted />
+              )
+            )}
           </div>
         )}
 

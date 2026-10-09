@@ -29,7 +29,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from apps.academic.models import Course
+from apps.academic.models import Course, Enrollment
+from apps.core.utils import parse_int_param, parse_uuid_param
 from apps.core.ai import ollama_status
 from apps.documents.models import Document
 
@@ -41,6 +42,10 @@ from .serializers import (
     ChatSessionUpdateSerializer,
     SavedAnswerSerializer,
 )
+import logging
+
+logger = logging.getLogger("apps.chat")
+
 from .services import accessible_courses, ask, serialize_answer, stream_ask
 
 
@@ -119,7 +124,7 @@ class ChatSessionViewSet(
             .annotate(message_count=Count("messages"))
             .order_by("-updated_at")
         )
-        course = self.request.query_params.get("course")
+        course = parse_uuid_param(self.request.query_params.get("course"), "course")
         if course:
             qs = qs.filter(course_id=course)
         return qs[:100] if self.action == "list" else qs
@@ -201,12 +206,14 @@ class AiHealthView(APIView):
         if request.user.is_admin:
             from django.conf import settings
 
-            from apps.documents.services.vector_store import collection_stats
+            from apps.documents.services.vector_store import collection_stats, index_compatibility
 
             try:
                 vectors = collection_stats()
-            except Exception as exc:  # pragma: no cover - surfaced to admins
-                vectors = {"collections": 0, "vectors": 0, "error": str(exc)}
+                vectors["compatibility"] = index_compatibility()
+            except Exception:  # pragma: no cover - surfaced to admins
+                logger.exception("Vector store stats failed")
+                vectors = {"collections": 0, "vectors": 0, "error": "The vector store couldn't be read. See the server log."}
             data["vector_store"] = vectors
             data["embedding_model"] = settings.EMBEDDING_MODEL_NAME
             data["retrieval"] = {"top_k": settings.RAG_TOP_K_RESULTS, "max_distance": settings.RAG_MAX_DISTANCE}
@@ -240,7 +247,7 @@ class AiInsightsView(APIView):
             raise PermissionDenied("Insights are available to teachers and administrators.")
 
         courses = Course.objects.all() if user.is_admin else Course.objects.filter(teacher=user)
-        course_param = request.query_params.get("course")
+        course_param = parse_uuid_param(request.query_params.get("course"), "course")
         if course_param:
             courses = courses.filter(id=course_param)
             if not courses.exists():
@@ -249,49 +256,65 @@ class AiInsightsView(APIView):
         course_ids = {c.id for c in courses}
         code_by_id = {str(c.id): c.code for c in courses}
 
-        days = max(7, min(90, int(request.query_params.get("days", 28))))
+        days = parse_int_param(request.query_params.get("days"), "days", 28, 7, 90)
         since = timezone.now() - timedelta(days=days)
-
-        # A question belongs to a course when the session was scoped to it, or —
-        # for "all courses" sessions — when its answer cited that course.
-        assistants = list(
-            ChatMessage.objects.filter(role="assistant", created_at__gte=since, session__student__role="student")
-            .select_related("session")
-            .order_by("created_at")
-        )
-        user_msgs = defaultdict(list)
-        for m in ChatMessage.objects.filter(
-            role="user", created_at__gte=since - timedelta(minutes=10), session__student__role="student"
-        ).order_by("created_at"):
-            user_msgs[m.session_id].append(m)
-
         all_scope = user.is_admin and not course_param
-        rows = []  # (course_code, student_id, created_at, status, question_text)
-        for a in assistants:
-            if a.session.course_id:
-                cids = [str(a.session.course_id)]
-            else:
-                cids = [c.get("course_id") for c in a.citations if c.get("course_id")]
-            cid = next((c for c in cids if c in code_by_id), None)
-            if cid:
-                label = code_by_id[cid]
-            elif all_scope and a.status == AnswerStatus.NOT_FOUND:
-                label = "All courses"  # unanswerable question asked across every course
-            else:
-                continue
-            prior = [m for m in user_msgs.get(a.session_id, []) if m.created_at <= a.created_at]
-            q_text = prior[-1].content if prior else a.session.title
-            rows.append((label, a.session.student_id, a.created_at, a.status, q_text))
+        enrolled = {
+            (str(sid), str(cid))
+            for sid, cid in Enrollment.objects.filter(course_id__in=course_ids, is_active=True)
+            .values_list("student_id", "course_id")
+        }
 
+        def collect(start, end):
+            """
+            Questions in [start, end) that belong to these courses: the session
+            was scoped to the course, or (for "all courses" sessions) the answer
+            cited it and the student is still enrolled. Sessions the student
+            deleted are never counted.
+            """
+            assistants = (
+                ChatMessage.objects.filter(
+                    role="assistant", created_at__gte=start, created_at__lt=end,
+                    session__student__role="student", session__is_active=True,
+                )
+                .select_related("session")
+                .order_by("created_at")
+            )
+            user_msgs = defaultdict(list)
+            for m in ChatMessage.objects.filter(
+                role="user", created_at__gte=start - timedelta(minutes=10), created_at__lt=end,
+                session__student__role="student", session__is_active=True,
+            ).order_by("created_at"):
+                user_msgs[m.session_id].append(m)
+
+            out = []  # (course_code, student_id, created_at, status, question_text)
+            for a in assistants:
+                sid = str(a.session.student_id)
+                if a.session.course_id:
+                    cid = str(a.session.course_id) if str(a.session.course_id) in code_by_id else None
+                else:
+                    cited = [c.get("course_id") for c in a.citations if c.get("course_id")]
+                    cid = next((c for c in cited if c in code_by_id and (sid, c) in enrolled), None)
+                if cid:
+                    label = code_by_id[cid]
+                elif all_scope and a.status == AnswerStatus.NOT_FOUND:
+                    label = "All courses"  # unanswerable question asked across every course
+                else:
+                    continue
+                prior = [m for m in user_msgs.get(a.session_id, []) if m.created_at <= a.created_at]
+                q_text = prior[-1].content if prior else a.session.title
+                out.append((label, a.session.student_id, a.created_at, a.status, q_text))
+            return out
+
+        now = timezone.now()
+        rows = collect(since, now)
         total = len(rows)
         answered = sum(1 for r in rows if r[3] == AnswerStatus.ANSWERED)
         not_found = sum(1 for r in rows if r[3] == AnswerStatus.NOT_FOUND)
         students = {r[1] for r in rows}
 
         prev_since = since - timedelta(days=days)
-        prev_total = ChatMessage.objects.filter(
-            role="assistant", created_at__gte=prev_since, created_at__lt=since, session__student__role="student"
-        ).count()
+        prev_total = len(collect(prev_since, since))
 
         # Heatmap: course × weekday
         weekday = defaultdict(lambda: [0] * 7)

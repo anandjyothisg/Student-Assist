@@ -17,15 +17,17 @@ import { ErrorState } from '../ui/ErrorState';
 import { Skeleton } from '../ui/Skeleton';
 import { Avatar } from '../ui/Avatar';
 
-const ACCEPT = '.pdf,.docx,.pptx,.txt';
+const ACCEPT = '.pdf,.docx,.pptx,.txt,.md';
 const MAX_MB = 50;
 
 const STATUS = {
-  completed: { tone: 'success', label: 'Ready' },
+  completed: { tone: 'success', label: 'Ready for AI' },
   processing: { tone: 'warning', label: 'Indexing' },
   pending: { tone: 'neutral', label: 'Queued' },
   failed: { tone: 'error', label: 'Failed' },
 };
+/* A new version stays out of search (and the old one stays live) until it is indexed. */
+const isPendingVersion = (d) => d && !d.is_latest && d.processing_status !== 'completed';
 
 function formatDate(iso) {
   try { return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); } catch { return ''; }
@@ -141,7 +143,7 @@ function Uploader({ course, structure, topicId, setTopicId, onUploaded }) {
   const pick = (f) => {
     if (!f) return;
     const ext = `.${f.name.split('.').pop().toLowerCase()}`;
-    if (!ACCEPT.split(',').includes(ext)) { setError('Use a PDF, DOCX, PPTX or TXT file.'); return; }
+    if (!ACCEPT.split(',').includes(ext)) { setError('Use a PDF, DOCX, PPTX, TXT or Markdown file.'); return; }
     if (f.size > MAX_MB * 1024 * 1024) { setError(`Files must be under ${MAX_MB} MB.`); return; }
     setError('');
     setFile(f);
@@ -225,7 +227,7 @@ function Uploader({ course, structure, topicId, setTopicId, onUploaded }) {
         <span className={`inline-flex size-10 shrink-0 items-center justify-center rounded-md ${drag ? 'bg-accent text-accent-fg' : 'bg-subtle text-fg-2'}`}><UploadCloud className="size-5" aria-hidden /></span>
         <span className="min-w-0">
           <span className="block text-[14px] font-medium text-fg">{drag ? 'Drop to add this file' : 'Add course material'}</span>
-          <span className="block text-[13px] text-fg-3">Drag a file here or browse · PDF, DOCX, PPTX or TXT up to {MAX_MB} MB · indexed automatically</span>
+          <span className="block text-[13px] text-fg-3">Drag a file here or browse · PDF, DOCX, PPTX, TXT or MD up to {MAX_MB} MB · indexed automatically</span>
         </span>
       </button>
       <input ref={inputRef} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} onChange={(e) => pick(e.target.files?.[0])} />
@@ -235,8 +237,18 @@ function Uploader({ course, structure, topicId, setTopicId, onUploaded }) {
 }
 
 /* ─── Document details ─────────────────────────────────────────────────── */
-function DocumentSheet({ doc, onClose, onReprocess, onDelete }) {
+function DocumentSheet({ doc, onClose, onReprocess, onDelete, onNewVersion }) {
   const [chunks, setChunks] = useState(null);
+  const versionInput = useRef(null);
+  const [versionBusy, setVersionBusy] = useState(false);
+  const pickVersion = async (f) => {
+    if (!f) return;
+    setVersionBusy(true);
+    try { await onNewVersion(doc, f); } finally {
+      setVersionBusy(false);
+      if (versionInput.current) versionInput.current.value = '';
+    }
+  };
   useEffect(() => {
     if (!doc) return;
     setChunks(null);
@@ -251,9 +263,20 @@ function DocumentSheet({ doc, onClose, onReprocess, onDelete }) {
       {doc && (
         <div className="flex flex-col gap-6 p-5">
           <div>
-            <div className="flex flex-wrap items-center gap-2"><Badge tone={st.tone} dot>{st.label}</Badge>{doc.category && <Badge>{doc.category}</Badge>}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={st.tone} dot>{st.label}</Badge>
+              {doc.version > 1 && <Badge mono>v{doc.version}</Badge>}
+              {doc.category && <Badge>{doc.category}</Badge>}
+            </div>
             <h3 className="mt-3 text-[17px] font-semibold leading-snug text-fg">{doc.title}</h3>
             <p className="mt-1 text-[12.5px] text-fg-3">{[doc.unit_title, doc.topic_title].filter(Boolean).join(' · ') || 'Not filed under a topic'}</p>
+            {isPendingVersion(doc) && (
+              <p className="mt-3 rounded-md bg-subtle px-3 py-2 text-[12.5px] text-fg-2">
+                {doc.processing_status === 'failed'
+                  ? 'This new version couldn\u2019t be indexed, so students still get answers from the previous version.'
+                  : 'This new version replaces the previous one as soon as it\u2019s indexed. Until then students get answers from the previous version.'}
+              </p>
+            )}
             {doc.processing_status === 'failed' && doc.error_message && (
               <p className="mt-3 rounded-md bg-error-dim px-3 py-2 text-[12.5px] text-error">{doc.error_message}</p>
             )}
@@ -284,7 +307,17 @@ function DocumentSheet({ doc, onClose, onReprocess, onDelete }) {
             )}
           </div>
           <div className="flex flex-wrap gap-2 border-t border-border pt-5">
-            <Button variant="secondary" iconLeft={RefreshCw} onClick={() => onReprocess(doc)} disabled={doc.processing_status === 'processing'}>Re-index</Button>
+            {doc.processing_status === 'failed' ? (
+              <Button iconLeft={RefreshCw} onClick={() => onReprocess(doc)}>Retry indexing</Button>
+            ) : (
+              <Button variant="secondary" iconLeft={RefreshCw} onClick={() => onReprocess(doc)} disabled={doc.processing_status === 'processing' || doc.processing_status === 'pending'}>Re-index</Button>
+            )}
+            {doc.is_latest && (
+              <>
+                <Button variant="secondary" iconLeft={UploadCloud} loading={versionBusy} onClick={() => versionInput.current?.click()}>Upload new version</Button>
+                <input ref={versionInput} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} onChange={(e) => pickVersion(e.target.files?.[0])} />
+              </>
+            )}
             <Button variant="danger-ghost" iconLeft={Trash2} onClick={() => onDelete(doc)}>Delete</Button>
           </div>
         </div>
@@ -381,28 +414,39 @@ export function TeacherDashboard() {
   }, []);
   useEffect(() => { fetchCourses(); }, [fetchCourses]);
 
+  const fetchSeq = useRef(0);
   const fetchCourse = useCallback(async ({ quiet = false } = {}) => {
     if (!selectedId) return;
+    const seq = ++fetchSeq.current;
     if (!quiet) setDocsState('loading');
     try {
       const [s, d] = await Promise.all([
         api.get(`/academic/courses/${selectedId}/structure/`),
         api.get('/documents/', { params: { course: selectedId, page_size: 100 } }),
       ]);
+      if (seq !== fetchSeq.current) return; // a newer request (another course) superseded this one
       setStructure(s.data);
       setDocs(d.data.results ?? d.data);
       setDocsState('ready');
     } catch {
-      if (!quiet) setDocsState('error');
+      if (!quiet && seq === fetchSeq.current) setDocsState('error');
     }
   }, [selectedId]);
   useEffect(() => { setSearch(''); setUploadTopic(''); fetchCourse(); }, [fetchCourse]);
 
   const hasPending = docs.some((d) => d.processing_status === 'pending' || d.processing_status === 'processing');
   useEffect(() => {
-    if (!hasPending) return;
-    const t = setInterval(() => { if (!document.hidden) fetchCourse({ quiet: true }); }, 4000);
-    return () => clearInterval(t);
+    if (!hasPending) return undefined;
+    // Poll quickly at first, then back off. The server marks interrupted jobs
+    // as failed, so this always ends.
+    const started = Date.now();
+    let timer;
+    const tick = () => {
+      if (!document.hidden) fetchCourse({ quiet: true });
+      timer = setTimeout(tick, Date.now() - started < 120000 ? 4000 : 15000);
+    };
+    timer = setTimeout(tick, 4000);
+    return () => clearTimeout(timer);
   }, [hasPending, fetchCourse]);
 
   const togglePublish = async () => {
@@ -413,6 +457,25 @@ export function TeacherDashboard() {
       toast.success(res.data.is_published ? `${res.data.code} is now visible to students.` : `${res.data.code} is hidden from students.`);
     } catch (err) { toast.error(extractErrorMessage(err)); }
     finally { setBusy(false); }
+  };
+
+  const uploadVersion = async (doc, file) => {
+    const ext = `.${file.name.split('.').pop().toLowerCase()}`;
+    if (!ACCEPT.split(',').includes(ext)) { toast.error('Use a PDF, DOCX, PPTX, TXT or Markdown file.'); return; }
+    if (file.size > MAX_MB * 1024 * 1024) { toast.error(`Files must be under ${MAX_MB} MB.`); return; }
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('title', doc.title);
+    fd.append('course', doc.course);
+    fd.append('parent', doc.parent || doc.id);
+    if (doc.category) fd.append('category', doc.category);
+    if (doc.topic) fd.append('topic', doc.topic);
+    try {
+      await api.post('/documents/upload/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success('New version uploaded. It replaces the current one once it\u2019s indexed.');
+      setOpenDoc(null);
+      fetchCourse({ quiet: true });
+    } catch (err) { toast.error(extractErrorMessage(err)); }
   };
 
   const reprocess = async (doc) => {
@@ -481,6 +544,7 @@ export function TeacherDashboard() {
           <span className="block truncate text-[13.5px] font-medium text-fg group-hover:underline group-hover:decoration-border-strong group-hover:underline-offset-4">{d.title}</span>
           <span className="block truncate text-xs text-fg-3">{[d.category, (d.file_type || '').toUpperCase(), sizeLabel(d.file_size_mb), formatDate(d.created_at)].filter(Boolean).join(' · ')}</span>
         </button>
+        {isPendingVersion(d) && <Badge mono>New v{d.version}</Badge>}
         <Badge tone={st.tone} dot>{st.label}</Badge>
         <IconButton icon={MoreHorizontal} label={`Details for ${d.title}`} size="sm" onClick={() => setOpenDoc(d)} />
       </li>
@@ -651,7 +715,7 @@ export function TeacherDashboard() {
       )}
 
       <NewCourseDialog open={newOpen} onClose={() => setNewOpen(false)} onCreated={(c) => fetchCourses(c.id)} />
-      <DocumentSheet doc={openDoc} onClose={() => setOpenDoc(null)} onReprocess={reprocess} onDelete={(d) => setConfirm({ kind: 'doc', item: d })} />
+      <DocumentSheet doc={openDoc} onClose={() => setOpenDoc(null)} onReprocess={reprocess} onNewVersion={uploadVersion} onDelete={(d) => setConfirm({ kind: 'doc', item: d })} />
       <NameDialog
         open={!!nameDialog}
         onClose={() => setNameDialog(null)}

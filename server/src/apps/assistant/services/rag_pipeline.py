@@ -48,7 +48,12 @@ def run_rag_query(conversation: Conversation, question: str) -> Message:
     
     # Pre-fetch Document details for titles in context
     doc_ids = {c["metadata"]["document_id"] for c in filtered_chunks}
-    docs_map = {str(d.id): d for d in Document.objects.filter(id__in=doc_ids)}
+    # Only current, fully indexed versions may be used as context.
+    docs_map = {
+        str(d.id): d
+        for d in Document.objects.filter(id__in=doc_ids, is_latest=True, processing_status="completed")
+    }
+    filtered_chunks = [c for c in filtered_chunks if c["metadata"]["document_id"] in docs_map]
     
     for c in filtered_chunks:
         doc_id = c["metadata"]["document_id"]

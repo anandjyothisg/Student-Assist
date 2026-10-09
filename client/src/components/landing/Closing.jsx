@@ -76,7 +76,7 @@ export function UnderTheHood() {
   );
 }
 
-export function Closing({ onStart }) {
+export function Closing({ onStart, signedIn = false }) {
   const reduce = useReducedMotion();
   return (
     <section aria-labelledby="close-title" className="relative overflow-hidden pb-28 pt-16 sm:pb-36">
@@ -107,8 +107,8 @@ export function Closing({ onStart }) {
           <Knot pulse className="-mb-[3px]" />
         </div>
 
-        <Button size="xl" iconRight={ArrowRight} onClick={() => onStart('register')}>Create account</Button>
-        <p className="mt-5 text-[14px] text-fg-3">
+        <Button size="xl" iconRight={ArrowRight} onClick={() => onStart('register')}>{signedIn ? 'Open app' : 'Create account'}</Button>
+        {!signedIn && <p className="mt-5 text-[14px] text-fg-3">
           Already have an account?{' '}
           <button
             type="button"
@@ -117,7 +117,7 @@ export function Closing({ onStart }) {
           >
             Sign in
           </button>
-        </p>
+        </p>}
       </div>
     </section>
   );

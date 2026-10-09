@@ -13,9 +13,11 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.exceptions import PermissionDenied
 
+from apps.core.utils import parse_uuid_param
 from apps.core.pagination import StandardPagination
 from apps.core.permissions import IsAdminOrTeacher
 from apps.documents.models import Document, DocumentChunk, DocumentStatus
+from apps.core.access import can_manage_course, readable_courses
 from apps.documents.permissions import IsDocumentAccessAllowed
 from apps.documents.serializers import (
     DocumentChunkSerializer,
@@ -41,6 +43,13 @@ class DocumentViewSet(ModelViewSet):
 
     pagination_class = StandardPagination
     permission_classes = [IsAuthenticated, IsDocumentAccessAllowed]
+
+    # Uploads and these actions run parsers / the embedder on the server.
+    INDEXING_ACTIONS = {"create", "upload", "reprocess", "extract_pdf", "clean_text", "chunk_text", "reindex_vectors"}
+
+    def get_throttles(self):
+        self.throttle_scope = "indexing" if self.action in self.INDEXING_ACTIONS else None
+        return super().get_throttles()
     http_method_names = ["get", "post", "delete", "head", "options"]
 
     def get_permissions(self):
@@ -55,6 +64,14 @@ class DocumentViewSet(ModelViewSet):
             return DocumentListSerializer
         return DocumentDetailSerializer
 
+    def list(self, request: Request, *args, **kwargs) -> Response:
+        # Teachers watch their uploads here: release jobs a restart interrupted.
+        if request.user.is_admin or request.user.is_teacher:
+            from apps.documents.tasks import sweep_stale_documents
+
+            sweep_stale_documents(self.get_queryset())
+        return super().list(request, *args, **kwargs)
+
     def get_queryset(self):
         user = self.request.user
         qs = Document.objects.select_related(
@@ -63,26 +80,38 @@ class DocumentViewSet(ModelViewSet):
 
         # Filtering based on role permissions
         if user.is_student:
-            # Students see only documents from courses they are enrolled in
-            enrolled_course_ids = user.enrollments.filter(is_active=True).values_list(
-                "course_id", flat=True
+            # Students: published courses they're enrolled in, current indexed version only.
+            qs = qs.filter(
+                course__in=readable_courses(user),
+                processing_status=DocumentStatus.COMPLETED,
+                is_latest=True,
             )
-            qs = qs.filter(course_id__in=enrolled_course_ids, processing_status=DocumentStatus.COMPLETED)
         elif user.is_teacher:
             # Teachers see documents from their own courses
             qs = qs.filter(course__teacher=user)
+        elif not user.is_admin:
+            qs = qs.none()
 
-        # Versioning: default to showing only latest versions
-        all_versions = self.request.query_params.get("all_versions")
-        if not all_versions or all_versions.lower() != "true":
-            qs = qs.filter(is_latest=True)
+        # Versioning: managers may ask for superseded versions; everyone else sees the latest.
+        manager = user.is_admin or user.is_teacher
+        all_versions = self.request.query_params.get("all_versions", "").lower() == "true"
+        if not (all_versions and manager):
+            if manager:
+                # Also show a new version that is still being indexed (or failed);
+                # it replaces the live one only once indexing succeeds.
+                qs = qs.filter(
+                    models.Q(is_latest=True)
+                    | models.Q(processing_status__in=[DocumentStatus.PENDING, DocumentStatus.PROCESSING, DocumentStatus.FAILED])
+                )
+            else:
+                qs = qs.filter(is_latest=True)
 
         # Filter by course
-        course_id = self.request.query_params.get("course")
+        course_id = parse_uuid_param(self.request.query_params.get("course"), "course")
         if course_id:
             qs = qs.filter(course_id=course_id)
 
-        topic_id = self.request.query_params.get("topic")
+        topic_id = parse_uuid_param(self.request.query_params.get("topic"), "topic")
         if topic_id:
             qs = qs.filter(topic_id=topic_id)
 
@@ -132,58 +161,14 @@ class DocumentViewSet(ModelViewSet):
         logger.info(f"Processing for document {document.id} started via {mode}")
 
     def destroy(self, request: Request, *args, **kwargs) -> Response:
+        from apps.documents.services.lifecycle import IndexCleanupError, delete_document
+
         document = self.get_object()
         doc_id = document.id
-        course_id = document.course.id
-
-        # Delete from ChromaDB
-        from apps.documents.services.vector_store import delete_document_chunks
         try:
-            delete_document_chunks(str(course_id), str(doc_id))
-        except Exception as e:
-            logger.error(f"Failed to delete ChromaDB vectors for document {doc_id}: {e}")
-
-        with transaction.atomic():
-            was_latest = document.is_latest
-            parent = document.parent
-
-            self.perform_destroy(document)
-
-            # If the deleted document was the latest version, promote the next highest version
-            if was_latest:
-                if parent:
-                    # Find other versions that point to this parent
-                    remaining = Document.objects.filter(parent=parent).order_by("-version")
-                    if remaining.exists():
-                        latest_rem = remaining.first()
-                        latest_rem.is_latest = True
-                        latest_rem.save(update_fields=["is_latest"])
-                    else:
-                        # Only root parent remains. Promote root parent.
-                        parent.is_latest = True
-                        parent.save(update_fields=["is_latest"])
-                else:
-                    # The deleted document was the root parent.
-                    # Find all children pointing to it and promote the oldest one to be the new root parent.
-                    remaining = Document.objects.filter(parent_id=doc_id).order_by("version")
-                    if remaining.exists():
-                        new_root = remaining.first()
-                        new_root.parent = None
-                        new_root.save(update_fields=["parent"])
-
-                        # Re-parent all other children to the new root
-                        Document.objects.filter(parent_id=doc_id).update(parent=new_root)
-
-                        # Find the highest version among all remaining, make it latest
-                        all_rem = Document.objects.filter(parent=new_root)
-                        if all_rem.exists():
-                            latest_rem = all_rem.order_by("-version").first()
-                            latest_rem.is_latest = True
-                            latest_rem.save(update_fields=["is_latest"])
-                        else:
-                            new_root.is_latest = True
-                            new_root.save(update_fields=["is_latest"])
-
+            delete_document(document)
+        except IndexCleanupError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         logger.info(f"Document {doc_id} deleted by user {request.user.pk}")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -195,7 +180,14 @@ class DocumentViewSet(ModelViewSet):
     )
     def reprocess(self, request: Request, pk=None) -> Response:
         """POST /api/v1/documents/{id}/reprocess/ — retry failed documents."""
+        from apps.documents.tasks import sweep_stale_documents
+
         document = self.get_object()
+        if not can_manage_course(request.user, document.course):
+            return Response({"detail": "Only the course's teacher can re-index it."}, status=status.HTTP_403_FORBIDDEN)
+        # A job interrupted by a restart is stuck in PROCESSING; release it first.
+        if sweep_stale_documents(Document.objects.filter(id=document.id)):
+            document.refresh_from_db()
         if document.processing_status == DocumentStatus.PROCESSING:
             return Response(
                 {"detail": "Document is currently being processed."},
@@ -342,7 +334,7 @@ class DocumentViewSet(ModelViewSet):
         except Exception as e:
             logger.exception(f"Direct text extraction failed: {e}")
             return Response(
-                {"detail": f"Failed to extract text from PDF: {str(e)}"},
+                {"detail": f"Failed to extract text from PDF. The details were logged; please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         finally:
@@ -392,7 +384,7 @@ class DocumentViewSet(ModelViewSet):
             return Response(cleaned, status=status.HTTP_200_OK)
         except Exception as e:
             return Response(
-                {"detail": f"Failed to clean text: {str(e)}"},
+                {"detail": f"Failed to clean text. The details were logged; please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -463,7 +455,7 @@ class DocumentViewSet(ModelViewSet):
             return Response(chunks, status=status.HTTP_200_OK)
         except Exception as e:
             return Response(
-                {"detail": f"Failed to split text: {str(e)}"},
+                {"detail": f"Failed to split text. The details were logged; please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -517,7 +509,7 @@ class DocumentViewSet(ModelViewSet):
         except Exception as e:
             logger.exception(f"Re-indexing failed: {e}")
             return Response(
-                {"detail": f"Failed to re-index document: {str(e)}"},
+                {"detail": f"Failed to re-index document. The details were logged; please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

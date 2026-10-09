@@ -217,6 +217,12 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
                 f"Unsupported file type '{ext}'. Allowed: {', '.join(ext_to_type.keys())}"
             )
 
+        from apps.core.utils import sniff_document
+
+        problem = sniff_document(file, ext)
+        if problem:
+            raise serializers.ValidationError(problem)
+
         # Attach the detected type so create() can use it
         self._detected_file_type = ext_to_type[ext]
         return file
@@ -250,21 +256,19 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
 
         with transaction.atomic():
             if parent:
-                # Find current maximum version in this document family
-                max_version = Document.objects.filter(
+                # Number the new version under a lock on the family so two
+                # concurrent uploads can't get the same version number.
+                family = Document.objects.select_for_update().filter(
                     models.Q(id=parent.id) | models.Q(parent=parent)
-                ).aggregate(Max("version"))["version__max"] or 1
-                new_version = max_version + 1
+                )
+                new_version = (family.aggregate(Max("version"))["version__max"] or 1) + 1
 
-                # Demote all existing versions in this family to is_latest=False
-                Document.objects.filter(
-                    models.Q(id=parent.id) | models.Q(parent=parent)
-                ).update(is_latest=False)
-
-                # Set versioning fields on the new document
+                # The current version stays live until this one is fully indexed;
+                # processing promotes it (see tasks.promote_version). Demoting now
+                # would leave the material unanswerable if indexing failed.
                 validated_data["parent"] = parent
                 validated_data["version"] = new_version
-                validated_data["is_latest"] = True
+                validated_data["is_latest"] = False
             else:
                 validated_data["version"] = 1
                 validated_data["is_latest"] = True

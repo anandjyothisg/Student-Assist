@@ -30,16 +30,70 @@ def _get_collection_name(course_id: str) -> str:
     return f"{settings.CHROMA_COLLECTION_PREFIX}_course_{cleaned_id}"
 
 
+class IndexMismatchError(RuntimeError):
+    """The collection was built with a different embedding model than the one configured."""
+
+
+def index_signature() -> dict:
+    """What every vector in a course collection was produced with."""
+    return {"embedding_model": settings.EMBEDDING_MODEL_NAME}
+
+
+def check_signature(collection) -> None:
+    """
+    Refuse to mix embeddings from different models: a model change would
+    otherwise make every search silently return nonsense or nothing.
+    Collections created before signatures were recorded are accepted (and
+    reported by `index_compatibility`); `index_documents --rebuild` re-signs them.
+    """
+    meta = collection.metadata or {}
+    built_with = meta.get("embedding_model")
+    if built_with and built_with != settings.EMBEDDING_MODEL_NAME:
+        raise IndexMismatchError(
+            f"Collection {collection.name} was built with {built_with}, but EMBEDDING_MODEL_NAME is "
+            f"{settings.EMBEDDING_MODEL_NAME}. Run `manage.py index_documents --rebuild`."
+        )
+
+
 def get_course_collection(course_id: str) -> chromadb.Collection:
-    """Retrieves or creates a course-specific collection."""
+    """Retrieves or creates a course-specific collection (for writing)."""
     client = get_chroma_client()
-    collection_name = _get_collection_name(course_id)
-    
-    # We use cosine distance space for similarity scoring
-    return client.get_or_create_collection(
-        name=collection_name,
-        metadata={"hnsw:space": "cosine"}
+    collection = client.get_or_create_collection(
+        name=_get_collection_name(course_id),
+        metadata={"hnsw:space": "cosine", **index_signature()},  # cosine distance for similarity scoring
     )
+    check_signature(collection)
+    return collection
+
+
+def find_course_collection(course_id: str):
+    """The course's collection if it exists (searching must not create empty ones)."""
+    try:
+        collection = get_chroma_client().get_collection(_get_collection_name(course_id))
+    except Exception:
+        return None
+    check_signature(collection)
+    return collection
+
+
+def index_compatibility() -> dict:
+    """Signature status of every course collection, for the health endpoint."""
+    client = get_chroma_client()
+    prefix = f"{settings.CHROMA_COLLECTION_PREFIX}_course_"
+    out = {"matching": 0, "unsigned": 0, "mismatched": []}
+    for col in client.list_collections():
+        name = getattr(col, "name", str(col))
+        if not name.startswith(prefix):
+            continue
+        meta = client.get_collection(name).metadata or {}
+        built_with = meta.get("embedding_model")
+        if not built_with:
+            out["unsigned"] += 1
+        elif built_with == settings.EMBEDDING_MODEL_NAME:
+            out["matching"] += 1
+        else:
+            out["mismatched"].append({"collection": name, "embedding_model": built_with})
+    return out
 
 
 def upsert_document_chunks(
@@ -92,13 +146,24 @@ def upsert_document_chunks(
 
 
 def delete_document_chunks(course_id: str, document_id: str) -> None:
-    """Deletes all chunks associated with a document from the course collection."""
+    """
+    Deletes every vector of a document. Raises on failure: callers must know
+    when stale content could still be retrieved.
+    """
+    collection = find_course_collection(course_id)
+    if collection is None:
+        return
+    logger.info(f"Deleting all vector store chunks for document {document_id} inside course {course_id}")
+    collection.delete(where={"document_id": str(document_id)})
+
+
+def delete_course_collection(course_id: str) -> None:
+    """Drop a course's whole collection (used when the course is deleted)."""
     try:
-        collection = get_course_collection(course_id)
-        logger.info(f"Deleting all vector store chunks for document {document_id} inside course {course_id}")
-        collection.delete(where={"document_id": str(document_id)})
-    except Exception as e:
-        logger.error(f"Error deleting chunks from ChromaDB: {e}")
+        get_chroma_client().delete_collection(_get_collection_name(course_id))
+    except Exception as exc:
+        if "does not exist" not in str(exc).lower():
+            raise
 
 
 def search_relevant_chunks(
@@ -117,7 +182,9 @@ def search_relevant_chunks(
     Returns:
         list of dict: [{"id": str, "content": str, "metadata": dict, "distance": float}]
     """
-    collection = get_course_collection(course_id)
+    collection = find_course_collection(course_id)
+    if collection is None:
+        return []
     count = collection.count()
     if count == 0:
         return []
@@ -201,6 +268,9 @@ def search_courses(course_ids: list[str], query_embedding: list[float], top_k: i
         for attempt in (1, 2):
             try:
                 merged.extend(search_relevant_chunks(str(cid), query_embedding, top_k=top_k))
+                break
+            except IndexMismatchError as exc:
+                logger.error(str(exc))
                 break
             except Exception as exc:
                 logger.warning(f"Vector search failed for course {cid} (attempt {attempt}): {exc}")

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValueEvent, useScroll, useSpring } from 'framer-motion';
-import { Menu, Moon, Sun, X } from 'lucide-react';
+import { ArrowRight, Menu, Moon, Sun, X } from 'lucide-react';
 import { Button, IconButton } from '../ui/Button';
 import { Brand } from '../ui/BrandMark';
 import { useTheme } from '../ui/Theme';
@@ -13,7 +13,7 @@ const LINKS = [
   ['#roles', 'Who it’s for'],
 ];
 
-export function LandingNav({ onStart }) {
+export function LandingNav({ onStart, signedIn = false }) {
   const { isDark, toggleTheme } = useTheme();
   const { scrollY, scrollYProgress } = useScroll();
   const progress = useSpring(scrollYProgress, { stiffness: 200, damping: 40, mass: 0.4 });
@@ -47,8 +47,14 @@ export function LandingNav({ onStart }) {
           </nav>
           <div className="flex items-center gap-1.5">
             <IconButton icon={isDark ? Sun : Moon} label={isDark ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme} />
-            <Button variant="ghost" onClick={() => onStart('login')} className="max-sm:hidden">Sign in</Button>
-            <Button onClick={() => onStart('register')} className="max-sm:hidden">Create account</Button>
+            {signedIn ? (
+              <Button onClick={() => onStart()} iconRight={ArrowRight} className="max-sm:hidden">Open app</Button>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => onStart('login')} className="max-sm:hidden">Sign in</Button>
+                <Button onClick={() => onStart('register')} className="max-sm:hidden">Create account</Button>
+              </>
+            )}
             <IconButton
               icon={open ? X : Menu}
               label={open ? 'Close menu' : 'Open menu'}
@@ -80,8 +86,14 @@ export function LandingNav({ onStart }) {
               ))}
             </ul>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:hidden">
-              <Button variant="secondary" size="lg" onClick={() => onStart('login')}>Sign in</Button>
-              <Button size="lg" onClick={() => onStart('register')}>Create account</Button>
+              {signedIn ? (
+                <Button size="lg" className="col-span-2" onClick={() => onStart()}>Open app</Button>
+              ) : (
+                <>
+                  <Button variant="secondary" size="lg" onClick={() => onStart('login')}>Sign in</Button>
+                  <Button size="lg" onClick={() => onStart('register')}>Create account</Button>
+                </>
+              )}
             </div>
           </motion.nav>
         )}
