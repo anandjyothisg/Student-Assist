@@ -4,9 +4,10 @@ SmartStudent AI — Assistant Views
 
 import logging
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, GenericViewSet
@@ -167,6 +168,9 @@ class ConversationViewSet(
             )
             
         course_id = data.get("course_id")
+        if course_id:
+            from apps.chat.services import resolve_course_ids
+            resolve_course_ids(request.user, course_id)  # raises 403 if not permitted
         question = data.get("question")
         
         if not course_id or not question:
@@ -280,6 +284,9 @@ class ConversationViewSet(
             )
             
         course_id = data.get("course_id")
+        if course_id:
+            from apps.chat.services import resolve_course_ids
+            resolve_course_ids(request.user, course_id)  # raises 403 if not permitted
         question = data.get("question")
         
         if not course_id or not question:
@@ -360,6 +367,9 @@ class ConversationViewSet(
             )
             
         course_id = data.get("course_id")
+        if course_id:
+            from apps.chat.services import resolve_course_ids
+            resolve_course_ids(request.user, course_id)  # raises 403 if not permitted
         question = data.get("question")
         
         if not course_id or not question:
@@ -485,7 +495,8 @@ class GeneratedContentViewSet(
 
         if user.is_student:
             enrolled = user.enrollments.filter(is_active=True).values_list("course_id", flat=True)
-            qs = qs.filter(course_id__in=enrolled)
+            # Students only see what they generated themselves.
+            qs = qs.filter(course_id__in=enrolled, created_by=user)
         elif user.is_teacher:
             qs = qs.filter(course__teacher=user)
 
@@ -493,6 +504,11 @@ class GeneratedContentViewSet(
         if content_type:
             qs = qs.filter(content_type=content_type)
 
+        content_type = self.request.query_params.get("content_type")
+        if content_type:
+            qs = qs.filter(content_type=content_type)
+        if self.request.query_params.get("mine") == "true":
+            qs = qs.filter(created_by=user)
         course_id = self.request.query_params.get("course")
         if course_id:
             qs = qs.filter(course_id=course_id)
@@ -517,6 +533,11 @@ class GeneratedContentViewSet(
             data=request.data, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
+        from apps.chat.services import resolve_course_ids
+        gen_course = serializer.validated_data.get("course_id") or serializer.validated_data.get("course")
+        if gen_course is None:
+            return Response({"detail": "course_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        resolve_course_ids(request.user, getattr(gen_course, "id", gen_course))
 
         try:
             result = generate_content(serializer.validated_data, request.user)
@@ -1422,9 +1443,16 @@ class LearningAnalyticsView(APIView):
             if user.is_teacher or user.is_admin:
                 from apps.accounts.models import User as AccountUser
                 try:
-                    student = AccountUser.objects.get(id=student_id)
-                except AccountUser.DoesNotExist:
+                    student = AccountUser.objects.get(id=student_id, role="student")
+                except (AccountUser.DoesNotExist, ValueError, DjangoValidationError):
                     return Response({"detail": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
+                if user.is_teacher and not Enrollment.objects.filter(
+                    student=student, course__teacher=user, is_active=True
+                ).exists():
+                    return Response(
+                        {"detail": "You can only view analytics for students in your courses."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
             else:
                 return Response(
                     {"detail": "You do not have permission to view other students' analytics."},
@@ -1546,152 +1574,32 @@ class LearningAnalyticsView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-def generate_intelligent_academic_response(query: str, context_blocks: list) -> str:
-    """Generates a structured, professional academic markdown answer tailored to the user's question."""
-    q_lower = query.lower()
-    
-    context_prefix = ""
-    if context_blocks:
-        context_prefix = "### Synthesized Course Material Context\n" + "\n\n".join(context_blocks[:2]) + "\n\n---\n\n"
-
-    if any(k in q_lower for k in ["summary", "summarize", "overview", "lecture"]):
-        return (
-            f"{context_prefix}## Lecture & Study Materials Executive Summary\n\n"
-            f"Based on the course inquiry regarding **\"{query}\"**, here is the structured academic breakdown:\n\n"
-            "### 1. Primary Objectives & Concepts\n"
-            "- **Theoretical Core**: Defines the fundamental structures, constraints, and algorithmic boundaries governing the topic.\n"
-            "- **Methodological Approach**: Emphasizes standard design patterns, analysis of time/space complexities, and implementation invariants.\n\n"
-            "### 2. Detailed Technical Breakdown\n"
-            "1. **Initialization & Setup**: Establishing boundary conditions and verifying domain inputs.\n"
-            "2. **Core Execution Cycle**: Processing state transitions while maintaining invariants.\n"
-            "3. **Termination & Optimization**: Convergence criteria and asymptotic bounds evaluation.\n\n"
-            "### 3. Practical Key Takeaways\n"
-            "> **Key Exam Insight:** Always verify memory bounds and edge cases when analyzing algorithmic efficiency and recurrence relations."
-        )
-
-    if any(k in q_lower for k in ["code", "python", "algorithm", "quicksort", "tree", "graph", "data structure", "sort"]):
-        return (
-            f"{context_prefix}## Technical Analysis & Implementation\n\n"
-            f"Here is the comprehensive technical breakdown for **\"{query}\"**:\n\n"
-            "### Conceptual Architecture\n"
-            "The algorithm operates by decomposing the problem space into subproblems, executing in logarithmic or polynomial bounds depending on input distribution.\n\n"
-            "### Reference Implementation (Python)\n"
-            "```python\ndef solve_problem(data_list):\n"
-            "    \"\"\"\n"
-            "    Executes optimal processing with time complexity O(N log N) and space complexity O(1).\n"
-            "    \"\"\"\n"
-            "    if len(data_list) <= 1:\n"
-            "        return data_list\n"
-            "        \n"
-            "    pivot = data_list[len(data_list) // 2]\n"
-            "    left = [x for x in data_list if x < pivot]\n"
-            "    middle = [x for x in data_list if x == pivot]\n"
-            "    right = [x for x in data_list if x > pivot]\n"
-            "    \n"
-            "    return solve_problem(left) + middle + solve_problem(right)\n"
-            "```\n\n"
-            "### Asymptotic Complexity Analysis\n"
-            "| Case | Time Complexity | Space Complexity | Notes |\n"
-            "|------|-----------------|------------------|-------|\n"
-            "| Best Case | O(N log N) | O(log N) | Balanced partitioning |\n"
-            "| Average Case | O(N log N) | O(log N) | Random distribution |\n"
-            "| Worst Case | O(N^2) | O(N) | Degenerate pivot selection |\n"
-        )
-
-    return (
-        f"{context_prefix}## Academic Analysis: {query.capitalize()}\n\n"
-        f"In response to your query **\"{query}\"**, here is the structured explanation:\n\n"
-        "### Key Principles & Definitions\n"
-        "1. **Core Concept**: The topic is centered on foundational analytical models used to evaluate computational and mathematical systems.\n"
-        "2. **Operational Framework**: Requires systematic problem formulation, parameter identification, and empirical validation.\n\n"
-        "### Step-by-Step Breakdown\n"
-        "- **Step 1 — Problem Definition**: Formulate initial conditions and system boundaries.\n"
-        "- **Step 2 — Analytical Process**: Apply fundamental theorems to decompose complex operations into primitive components.\n"
-        "- **Step 3 — Verification**: Validate the solution against expected boundary limits and stability criteria.\n\n"
-        "### Key Takeaway & Exam Guidance\n"
-        "> **Tip:** Be prepared to outline both theoretical definitions and step-by-step proofs when asked about this topic in assessments."
-    )
-
-
 class AiAskView(APIView):
     """
-    POST /api/v1/ai/ask/
-    Universal AI query endpoint connecting Frontend Ask Screen directly to RAG & AI inference pipeline.
+    POST /api/v1/ai/ask/ — legacy single-question endpoint.
+
+    Delegates to the grounded chat service (same access rules, citations and
+    persistence as /api/chat/ask/). Body: {query|question, course_id?, session_id?}.
     """
-    permission_classes = [AllowAny]
 
-    def post(self, request: Request) -> Response:
-        query = request.data.get("query") or request.data.get("question") or ""
-        query = str(query).strip()
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "ai"
 
-        if not query:
-            return Response(
-                {"detail": "Query string is required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+    def get_throttles(self):
+        from rest_framework.throttling import ScopedRateThrottle
 
-        course_id = request.data.get("course_id")
-        context_blocks = []
-        citations = []
+        return [ScopedRateThrottle()]
 
-        try:
-            from apps.documents.services.embedder import generate_query_embedding
-            from apps.documents.services.vector_store import search_relevant_chunks
-            from apps.documents.models import Document
-            from django.conf import settings
+    def post(self, request, *args, **kwargs):
+        from apps.chat.services import ask, serialize_answer
 
-            query_vector = generate_query_embedding(query)
-            raw_chunks = search_relevant_chunks(
-                course_id=str(course_id) if course_id else "",
-                query_embedding=query_vector,
-                top_k=getattr(settings, "RAG_TOP_K_RESULTS", 5)
-            )
-            filtered_chunks = [c for c in raw_chunks if c.get("distance", 1.0) <= 0.85]
-
-            doc_ids = {c["metadata"]["document_id"] for c in filtered_chunks if "metadata" in c and "document_id" in c["metadata"]}
-            docs_map = {str(d.id): d for d in Document.objects.filter(id__in=doc_ids)}
-
-            for idx, c in enumerate(filtered_chunks):
-                doc_id = c["metadata"].get("document_id")
-                page_num = c["metadata"].get("page_number", 1)
-                doc_obj = docs_map.get(str(doc_id))
-                doc_title = doc_obj.title if doc_obj else f"Document_{idx+1}.pdf"
-                
-                context_blocks.append(f"--- SOURCE: \"{doc_title}\", Page: {page_num} ---\n{c['content']}")
-                sim = max(0.0, min(1.0, 1.0 - c.get("distance", 0.5)))
-                citations.append({
-                    "id": f"c-{idx+1}",
-                    "document_title": str(doc_title),
-                    "page_number": int(page_num),
-                    "excerpt": c['content'][:300],
-                    "relevance_score": round(float(sim), 2)
-                })
-        except Exception as err:
-            logger.info(f"Vector search skipped or unindexed: {err}")
-
-        answer = ""
-        try:
-            import ollama
-            from django.conf import settings
-
-            prompt = f"Using context:\n\n{chr(10).join(context_blocks)}\n\nAnswer student question:\n{query}" if context_blocks else query
-            client = ollama.Client(host=getattr(settings, "OLLAMA_BASE_URL", "http://localhost:11434"))
-            res = client.chat(
-                model=getattr(settings, "OLLAMA_LLM_MODEL", "llama3.2"),
-                messages=[
-                    {"role": "system", "content": "You are SmartStudent AI, an expert academic tutor. Provide clear markdown answers."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            answer = res.get("message", {}).get("content", "")
-        except Exception as ollama_err:
-            logger.info(f"Local Ollama engine skipped ({ollama_err}). Using intelligent AI inference.")
-
-        if not answer:
-            answer = generate_intelligent_academic_response(query, context_blocks)
-
-        return Response({
-            "answer": answer,
-            "citations": citations,
-            "confidence_score": 0.96
-        }, status=status.HTTP_200_OK)
+        question = (request.data.get("query") or request.data.get("question") or "").strip()
+        if not question:
+            return Response({"detail": "Query string is required."}, status=status.HTTP_400_BAD_REQUEST)
+        session, msg = ask(
+            request.user,
+            question,
+            course_id=request.data.get("course_id") or None,
+            session_id=request.data.get("session_id") or None,
+        )
+        return Response(serialize_answer(session, msg))

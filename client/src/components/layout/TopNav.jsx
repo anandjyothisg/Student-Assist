@@ -2,183 +2,63 @@ import React from 'react';
 import { Search, Moon, Sun, Settings } from 'lucide-react';
 import { NAV_ITEMS } from './navConfig';
 import { useTheme } from '../ui/Theme';
+import { IconButton } from '../ui/Button';
+import { BrandMark } from '../ui/BrandMark';
 
-const TAB_LABELS = {
+const TAB_TITLES = {
   assistant: 'Ask',
   documents: 'Sources',
-  notebook:  'Notebook',
-  academic:  'Content',
-  analytics: 'Analytics',
+  notebook: 'Notebook',
+  academic: 'Content',
+  analytics: 'Insights',
   dashboard: 'Status',
-  accounts:  'Users',
+  accounts: 'Users',
+  courses: 'Courses',
 };
 
 export function TopNav({ activeTab, user, onOpenCommandPalette, onOpenSettings }) {
   const { isDark, toggleTheme } = useTheme();
-  const role  = user?.role ?? 'student';
-  const items = NAV_ITEMS[role] ?? NAV_ITEMS.student;
-
-  const activeItem = items.find((i) => i.tab === activeTab);
-  const pageTitle  = activeItem?.label ?? TAB_LABELS[activeTab] ?? '';
+  const items = NAV_ITEMS[user?.role] ?? NAV_ITEMS.student;
+  const title = items.find((i) => i.tab === activeTab)?.label ?? TAB_TITLES[activeTab] ?? '';
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);
 
   return (
     <header
-      className="sticky top-0 z-20 w-full flex items-center justify-between"
-      style={{
-        height: '56px',
-        padding: '0 20px',
-        background: 'color-mix(in srgb, var(--bg) 92%, transparent)',
-        borderBottom: '1px solid var(--border)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-      }}
+      className="sticky top-0 flex h-[var(--header-h)] w-full shrink-0 items-center justify-between gap-3 border-b border-border bg-canvas/90 px-4 backdrop-blur-md md:px-6"
+      style={{ zIndex: 'var(--z-sticky)' }}
     >
-      {/* ── Left: Page Title ── */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        {pageTitle && (
-          <h1
-            className="font-sans font-semibold tracking-tight select-none truncate"
-            style={{
-              fontSize: '15px',
-              color: 'var(--fg)',
-              letterSpacing: '-0.01em',
-              lineHeight: 1,
-            }}
-          >
-            {pageTitle}
-          </h1>
-        )}
+      <div className="flex min-w-0 items-center gap-2.5">
+        <BrandMark size={26} className="md:hidden" />
+        <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-[14px]">
+          <span className="hidden capitalize text-fg-3 md:inline">{user?.role || 'Workspace'}</span>
+          <span aria-hidden className="hidden text-border-strong md:inline">/</span>
+          <span aria-current="page" className="truncate font-semibold tracking-[-0.01em] text-fg">{title}</span>
+        </nav>
       </div>
 
-      {/* ── Right: Actions ── */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        {/* Search / Command Palette */}
+      <div className="flex shrink-0 items-center gap-1">
         <button
           onClick={onOpenCommandPalette}
-          className="flex items-center gap-2.5 rounded-lg transition-all duration-150 cursor-pointer"
-          style={{
-            padding: '7px 12px',
-            color: 'var(--fg-3)',
-            background: 'var(--bg-subtle)',
-            border: '1px solid var(--border)',
-            fontSize: '13px',
-            fontFamily: 'var(--font-sans)',
-            fontWeight: '500',
-            minHeight: '34px',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color        = 'var(--fg)';
-            e.currentTarget.style.borderColor  = 'var(--fg-3)';
-            e.currentTarget.style.background   = 'var(--bg-hover)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color        = 'var(--fg-3)';
-            e.currentTarget.style.borderColor  = 'var(--border)';
-            e.currentTarget.style.background   = 'var(--bg-subtle)';
-          }}
-          aria-label="Open command palette"
+          aria-label="Search and jump to"
+          className="group inline-flex h-9 items-center gap-2 rounded-md border border-border bg-surface px-2.5 text-[13px] text-fg-3 transition-colors hover:border-border-strong hover:text-fg sm:w-56 sm:px-3"
         >
-          <Search className="w-[15px] h-[15px] flex-shrink-0" strokeWidth={2} />
-          <span className="hidden sm:inline whitespace-nowrap">Search</span>
-
-          {/* Keyboard shortcut hint */}
-          <div
-            className="hidden md:flex items-center gap-0.5 ml-1"
-            style={{
-              fontSize: '10px',
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--fg-3)',
-              fontWeight: '600',
-            }}
-          >
-            <kbd
-              className="flex items-center justify-center rounded"
-              style={{
-                minWidth: '17px',
-                height: '17px',
-                padding: '0 3px',
-                background: 'var(--bg)',
-                border: '1px solid var(--border)',
-                fontSize: '10px',
-              }}
-            >
-              ⌘
-            </kbd>
-            <kbd
-              className="flex items-center justify-center rounded"
-              style={{
-                minWidth: '17px',
-                height: '17px',
-                padding: '0 3px',
-                background: 'var(--bg)',
-                border: '1px solid var(--border)',
-                fontSize: '10px',
-              }}
-            >
-              K
-            </kbd>
-          </div>
+          <Search className="size-4 shrink-0" aria-hidden />
+          <span className="hidden flex-1 text-left sm:inline">Search…</span>
+          <span className="hidden items-center gap-0.5 sm:flex" aria-hidden>
+            <kbd className="keycap">{isMac ? '⌘' : 'Ctrl'}</kbd>
+            <kbd className="keycap">K</kbd>
+          </span>
         </button>
-
-        {/* Separator */}
-        <div
-          className="w-px h-5 mx-0.5"
-          style={{ background: 'var(--border)' }}
-          aria-hidden="true"
-        />
-
-        {/* Theme Toggle */}
-        <button
+        <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
+        <IconButton
+          icon={isDark ? Sun : Moon}
+          label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
           onClick={toggleTheme}
-          className="flex items-center justify-center rounded-lg transition-all duration-150 cursor-pointer"
-          style={{
-            width: '34px',
-            height: '34px',
-            color: 'var(--fg-3)',
-            background: 'transparent',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color      = 'var(--fg)';
-            e.currentTarget.style.background = 'var(--bg-subtle)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color      = 'var(--fg-3)';
-            e.currentTarget.style.background = 'transparent';
-          }}
-          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          title={isDark ? 'Light mode' : 'Dark mode'}
-        >
-          {isDark ? (
-            <Sun className="w-[17px] h-[17px]" strokeWidth={2} />
-          ) : (
-            <Moon className="w-[17px] h-[17px]" strokeWidth={2} />
-          )}
-        </button>
-
-        {/* Settings — visible on desktop so users have a quick path without avatar */}
+        />
         {onOpenSettings && (
-          <button
-            onClick={onOpenSettings}
-            className="hidden sm:flex items-center justify-center rounded-lg transition-all duration-150 cursor-pointer"
-            style={{
-              width: '34px',
-              height: '34px',
-              color: 'var(--fg-3)',
-              background: 'transparent',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color      = 'var(--fg)';
-              e.currentTarget.style.background = 'var(--bg-subtle)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color      = 'var(--fg-3)';
-              e.currentTarget.style.background = 'transparent';
-            }}
-            aria-label="Open settings"
-            title="Settings"
-          >
-            <Settings className="w-[17px] h-[17px]" strokeWidth={2} />
-          </button>
+          <span className="hidden md:contents">
+            <IconButton icon={Settings} label="Settings" onClick={onOpenSettings} />
+          </span>
         )}
       </div>
     </header>

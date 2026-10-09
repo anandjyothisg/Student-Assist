@@ -1,67 +1,33 @@
-﻿import React from 'react';
-import { motion } from 'framer-motion';
+import React from 'react';
 
 /**
- * EmptyState — Blueprint spec:
- * - Centered, minimal. No illustration. No marketing copy.
- * - Icon (optional, monochrome). Title (Inter 15px semibold). Description (Inter 13px fg-muted).
- * - ONE action button maximum. Blueprint rule: no buttons that link away from current screen.
- * - Fade in at 180ms ease-out.
- *
- * Usage:
- *   <EmptyState
- *     icon={FileText}
- *     title="No documents yet"
- *     description="Upload the first file to let students ask questions about it."
- *     action={{ label: 'Upload a file', onClick: handleUpload }}
- *   />
+ * EmptyState — composed "nothing here yet" block.
+ * `action` / `secondaryAction` accept a React node (usually a <Button>).
  */
-export function EmptyState({
-  icon: Icon,
-  title,
-  description,
-  action,           // { label: string, onClick: fn } — optional, max 1
-  className = '',
-}) {
+export function EmptyState({ icon: Icon, title, description, action, secondaryAction, compact = false, className = '' }) {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.18, ease: [0.0, 0, 0.2, 1] }}
-      className={`flex flex-col items-center justify-center text-center px-6 py-12 gap-4 ${className}`}
+    <div
+      className={[
+        'flex flex-col items-center justify-center text-center animate-fade-in',
+        compact ? 'gap-3 px-4 py-8' : 'gap-4 px-6 py-14',
+        className,
+      ].join(' ')}
     >
       {Icon && (
-        <div className="w-10 h-10 rounded-xl bg-bg-subtle border border-border-base flex items-center justify-center flex-shrink-0">
-          <Icon className="w-5 h-5 text-fg-muted" />
+        <span className={`inline-flex items-center justify-center rounded-xl border border-border bg-subtle text-fg-2 ${compact ? 'size-10' : 'size-12'}`}>
+          <Icon className={compact ? 'size-[18px]' : 'size-5'} aria-hidden />
+        </span>
+      )}
+      <div className="flex max-w-sm flex-col gap-1.5">
+        {title && <h3 className="text-[15px] font-semibold text-fg">{title}</h3>}
+        {description && <p className="text-[13px] leading-relaxed text-fg-3">{description}</p>}
+      </div>
+      {(action || secondaryAction) && (
+        <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+          {action}
+          {secondaryAction}
         </div>
       )}
-
-      <div className="flex flex-col gap-1.5 max-w-xs">
-        {title && (
-          <h3 className="font-sans text-[15px] font-semibold text-fg-primary">
-            {title}
-          </h3>
-        )}
-        {description && (
-          <p className="font-sans text-[13px] text-fg-muted leading-relaxed">
-            {description}
-          </p>
-        )}
-      </div>
-
-      {action && (
-        <button
-          onClick={action.onClick}
-          className={[
-            'mt-1 h-8 px-4 rounded-lg border border-border-base',
-            'font-sans text-[13px] font-medium text-fg-secondary bg-bg-surface',
-            'hover:border-[#6E56CF]/40 hover:text-[#6E56CF]',
-            'transition-colors duration-150 cursor-pointer',
-          ].join(' ')}
-        >
-          {action.label}
-        </button>
-      )}
-    </motion.div>
+    </div>
   );
 }

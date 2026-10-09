@@ -172,6 +172,23 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "apps.core.exceptions.custom_exception_handler",
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "10/min",
+        "register": "5/hour",
+        "password_reset": "5/hour",
+        # Separate from "password_reset" (which gates the email-sending
+        # endpoint) so a single legitimate reset — which calls verify-otp
+        # and reset-confirm at least once each, often with a retry — never
+        # gets rate-limited into locking a user out of their own flow. The
+        # OTP model's own per-code attempt-lockout is the real brute-force
+        # defense; this is just a secondary safety net.
+        "password_reset_verify": "20/hour",
+        # Asking the assistant runs an LLM — generous for real use, but bounded.
+        "ai": os.environ.get("AI_THROTTLE_RATE", "40/min"),
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -251,6 +268,19 @@ CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutes soft limit
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Fair task distribution
 CELERY_TASK_ACKS_LATE = True  # Acknowledge only after task completes
 
+# Short socket timeouts on both the broker and result-backend Redis
+# connections so a broker/backend outage fails in seconds, not the
+# redis-py default of 120s — otherwise a single request that dispatches
+# a task can block its thread for minutes when Redis is unreachable.
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "socket_connect_timeout": 3,
+    "socket_timeout": 3,
+}
+CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
+    "socket_connect_timeout": 3,
+    "socket_timeout": 3,
+}
+
 # ---------------------------------------------------------------------------
 # Caching (Redis)
 # ---------------------------------------------------------------------------
@@ -271,15 +301,28 @@ CACHES = {
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "llama3.2")
 OLLAMA_EMBEDDING_MODEL = os.environ.get("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+OLLAMA_CONNECT_TIMEOUT = float(os.environ.get("OLLAMA_CONNECT_TIMEOUT", "5"))
+OLLAMA_READ_TIMEOUT = float(os.environ.get("OLLAMA_READ_TIMEOUT", "180"))
+OLLAMA_KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "2h")
+OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
 
-# ChromaDB
-CHROMA_DB_PATH = os.environ.get("CHROMA_DB_PATH", str(SERVER_DIR / "chroma_db"))
+# ChromaDB — a blank value in .env means "use the default", not "current directory".
+CHROMA_DB_PATH = os.environ.get("CHROMA_DB_PATH", "").strip() or str(SERVER_DIR / "chroma_db")
 CHROMA_COLLECTION_PREFIX = os.environ.get("CHROMA_COLLECTION_PREFIX", "smartstudent")
 
 # RAG Parameters
 RAG_CHUNK_SIZE = int(os.environ.get("RAG_CHUNK_SIZE", "1000"))
 RAG_CHUNK_OVERLAP = int(os.environ.get("RAG_CHUNK_OVERLAP", "200"))
-RAG_TOP_K_RESULTS = int(os.environ.get("RAG_TOP_K_RESULTS", "5"))
+RAG_TOP_K_RESULTS = int(os.environ.get("RAG_TOP_K_RESULTS", "6"))
+# Cosine distance above which a chunk is considered unrelated to the question.
+RAG_MAX_DISTANCE = float(os.environ.get("RAG_MAX_DISTANCE", "0.45"))
+
+# Document processing: "auto" uses Celery when Redis is reachable and otherwise
+# indexes in a background thread, "celery" always dispatches, "sync" never does.
+DOCUMENT_PROCESSING_MODE = os.environ.get("DOCUMENT_PROCESSING_MODE", "auto").strip().lower() or "auto"
+
+# Authored demo course library (see `manage.py seed_demo`).
+DEMO_CONTENT_DIR = SERVER_DIR / "demo_content"
 
 # SentenceTransformer embedding model (used by embedder service)
 EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")

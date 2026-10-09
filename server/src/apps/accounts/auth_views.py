@@ -2,13 +2,16 @@
 SmartStudent AI — JWT Authentication Views
 
 Endpoints:
-    POST   /api/v1/auth/register/          Register a new student account
-    POST   /api/v1/auth/login/             Obtain access + refresh tokens
-    POST   /api/v1/auth/logout/            Blacklist refresh token
-    POST   /api/v1/auth/token/refresh/     Rotate refresh token → new access token
-    GET    /api/v1/auth/me/                Get current user profile
-    PATCH  /api/v1/auth/me/                Update current user profile
-    POST   /api/v1/auth/password/change/   Change current user password
+    POST   /api/v1/auth/register/                Register a new student account
+    POST   /api/v1/auth/login/                   Obtain access + refresh tokens
+    POST   /api/v1/auth/logout/                  Blacklist refresh token
+    POST   /api/v1/auth/token/refresh/            Rotate refresh token → new access token
+    GET    /api/v1/auth/me/                      Get current user profile
+    PATCH  /api/v1/auth/me/                      Update current user profile
+    POST   /api/v1/auth/password/change/          Change current user password
+    POST   /api/v1/auth/password/forgot/          Request a password-reset code
+    POST   /api/v1/auth/password/verify-otp/      Verify a password-reset code
+    POST   /api/v1/auth/password/reset-confirm/   Reset password using a valid code
 """
 
 import logging
@@ -23,10 +26,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.accounts.auth_serializers import (
+    ForgotPasswordSerializer,
     LogoutSerializer,
     PasswordChangeSerializer,
     RegisterSerializer,
+    ResetPasswordConfirmSerializer,
     SmartStudentTokenObtainPairSerializer,
+    VerifyResetOtpSerializer,
 )
 from apps.accounts.serializers import UserProfileSerializer, UserProfileUpdateSerializer
 
@@ -53,6 +59,7 @@ class RegisterView(APIView):
 
     permission_classes = [AllowAny]
     serializer_class = RegisterSerializer  # for drf-spectacular
+    throttle_scope = "register"
 
     def post(self, request: Request) -> Response:
         serializer = RegisterSerializer(
@@ -99,6 +106,7 @@ class LoginView(TokenObtainPairView):
 
     permission_classes = [AllowAny]
     serializer_class = SmartStudentTokenObtainPairSerializer
+    throttle_scope = "login"
 
     def post(self, request: Request, *args, **kwargs) -> Response:
         response = super().post(request, *args, **kwargs)
@@ -128,7 +136,7 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
-        serializer = LogoutSerializer(data=request.data)
+        serializer = LogoutSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
         logger.info(f"[logout] User logged out: {request.user.email}")
@@ -235,3 +243,80 @@ class PasswordChangeView(APIView):
         serializer.save()
         logger.info(f"[password_change] Password changed: {request.user.email}")
         return Response({"detail": "Password changed successfully."})
+
+
+# ---------------------------------------------------------------------------
+# Password Reset (forgot password) — request / verify / confirm
+# ---------------------------------------------------------------------------
+
+# Generic response returned regardless of whether the email is registered.
+_FORGOT_PASSWORD_DETAIL = "If an account with that email exists, a reset code has been sent."
+
+
+@extend_schema(
+    summary="Forgot Password",
+    description=(
+        "Request a password-reset code by email. Always returns a generic "
+        "success message, whether or not the email is registered, to avoid "
+        "leaking account existence."
+    ),
+    tags=["Authentication"],
+)
+class ForgotPasswordView(APIView):
+    """POST /api/v1/auth/password/forgot/ — Issue a password-reset OTP."""
+
+    permission_classes = [AllowAny]
+    throttle_scope = "password_reset"
+
+    def post(self, request: Request) -> Response:
+        serializer = ForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": _FORGOT_PASSWORD_DETAIL}, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    summary="Verify Password Reset Code",
+    description=(
+        "Check a password-reset code before letting the user proceed to set "
+        "a new password. This is a UX-only check — the code is not consumed "
+        "here; /password/reset-confirm/ re-validates it as the real check."
+    ),
+    tags=["Authentication"],
+)
+class VerifyResetOtpView(APIView):
+    """POST /api/v1/auth/password/verify-otp/ — Check a reset code without consuming it."""
+
+    permission_classes = [AllowAny]
+    throttle_scope = "password_reset_verify"
+
+    def post(self, request: Request) -> Response:
+        serializer = VerifyResetOtpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response({"detail": "Code verified."}, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    summary="Confirm Password Reset",
+    description=(
+        "Consume a valid password-reset code and set a new password. "
+        "Blacklists all outstanding refresh tokens for the account, forcing "
+        "re-login on every device."
+    ),
+    tags=["Authentication"],
+)
+class ResetPasswordConfirmView(APIView):
+    """POST /api/v1/auth/password/reset-confirm/ — Reset the password using a valid code."""
+
+    permission_classes = [AllowAny]
+    throttle_scope = "password_reset_verify"
+
+    def post(self, request: Request) -> Response:
+        serializer = ResetPasswordConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        logger.info(f"[password_reset] Password reset via OTP: {user.email}")
+        return Response(
+            {"detail": "Password has been reset. Please log in with your new password."},
+            status=status.HTTP_200_OK,
+        )

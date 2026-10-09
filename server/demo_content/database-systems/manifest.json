@@ -1,0 +1,142 @@
+{
+  "code": "CS-305",
+  "title": "Database Management Systems",
+  "subject": "core-cs",
+  "teacher": "ravi.menon",
+  "description": "An in-depth study of relational database systems, covering data modelling, SQL, normalization, query processing, transactions, concurrency control, indexing and crash recovery. Students learn both how to design and query databases and how a DBMS executes and protects those queries internally.",
+  "units": [
+    {
+      "slug": "01-relational-model-and-sql",
+      "title": "Unit 1 · Relational Model and SQL",
+      "description": "The relational data model, keys and ER-based conceptual design, followed by the SQL language for defining and querying data.",
+      "topics": [
+        {
+          "slug": "01-relational-model-and-er",
+          "title": "Relational Model and ER Modelling",
+          "description": "Relations, tuples and attributes, super/candidate/primary/foreign keys, ER diagrams and mapping ER designs to tables.",
+          "documents": [
+            {
+              "file": "relational-model-and-er-notes.md",
+              "title": "Relational Model and ER Modelling — Lecture Notes",
+              "description": "Relational terminology, the hierarchy of keys with examples, ER constructs and cardinality, and rules for mapping ER diagrams to SQL tables.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            }
+          ]
+        },
+        {
+          "slug": "02-sql-fundamentals",
+          "title": "SQL Fundamentals",
+          "description": "DDL and DML, the SELECT-FROM-WHERE block, joins, grouping, subqueries and NULL semantics, with hands-on query practice.",
+          "documents": [
+            {
+              "file": "sql-fundamentals-notes.md",
+              "title": "SQL Fundamentals — Lecture Notes",
+              "description": "Logical evaluation order of a query, inner and outer joins on example tables, GROUP BY and HAVING, three-valued logic and subqueries.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            },
+            {
+              "file": "sql-practice-worked-queries.md",
+              "title": "SQL Practice: Worked Query Examples",
+              "description": "Lab handout with a Student/Course/Enrollment schema, sample data and eight solved queries with their exact results.",
+              "format": "docx",
+              "category": "Lab handout"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "02-design-and-normalization",
+      "title": "Unit 2 · Database Design and Query Processing",
+      "description": "Schema refinement using functional dependencies and normal forms, and the algebra and algorithms a DBMS uses to evaluate queries.",
+      "topics": [
+        {
+          "slug": "01-functional-dependencies-and-normal-forms",
+          "title": "Functional Dependencies and Normal Forms",
+          "description": "Anomalies, functional dependencies, Armstrong's axioms, attribute closure, 1NF through BCNF, lossless join and dependency preservation.",
+          "documents": [
+            {
+              "file": "functional-dependencies-and-normal-forms-notes.md",
+              "title": "Functional Dependencies and Normal Forms — Lecture Notes",
+              "description": "Closure computation, normal form definitions, a step-by-step decomposition to BCNF and the 3NF versus BCNF trade-off.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            }
+          ]
+        },
+        {
+          "slug": "02-relational-algebra-and-query-processing",
+          "title": "Relational Algebra and Query Processing",
+          "description": "Relational algebra operators, query trees, heuristic and cost-based optimization, and the I/O cost of join algorithms.",
+          "documents": [
+            {
+              "file": "relational-algebra-notes.md",
+              "title": "Relational Algebra and Query Optimization — Lecture Notes",
+              "description": "Selection, projection, set operators, joins and division, translation of SQL to query trees and equivalence-based rewriting.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            },
+            {
+              "file": "join-algorithms-cost-reference.md",
+              "title": "Join Algorithms and I/O Cost — Reference Sheet",
+              "description": "Cost formulas for nested-loop, block nested-loop, index nested-loop, sort-merge and hash joins with a fully computed example.",
+              "format": "txt",
+              "category": "Reference sheet"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "03-transactions-concurrency-storage",
+      "title": "Unit 3 · Transactions, Concurrency and Storage",
+      "description": "Transaction semantics and concurrency control, followed by physical storage, index structures and crash recovery.",
+      "topics": [
+        {
+          "slug": "01-transactions-and-concurrency",
+          "title": "Transactions and Concurrency Control",
+          "description": "ACID properties, schedules and serializability, two-phase locking, deadlock handling and SQL isolation levels.",
+          "documents": [
+            {
+              "file": "transactions-and-serializability-notes.md",
+              "title": "Transactions, Schedules and Serializability — Lecture Notes",
+              "description": "ACID explained with a bank transfer, concurrency anomalies, conflict serializability via precedence graphs and recoverable schedules.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            },
+            {
+              "file": "locking-deadlocks-and-isolation-levels.md",
+              "title": "Locking, Deadlocks and Isolation Levels",
+              "description": "Shared and exclusive locks, 2PL and its strict variants, wait-die and wound-wait, the isolation level anomaly table and MVCC.",
+              "format": "docx",
+              "category": "Lecture notes"
+            }
+          ]
+        },
+        {
+          "slug": "02-indexing-storage-and-recovery",
+          "title": "Indexing, Storage and Recovery",
+          "description": "Pages and files, clustered and secondary indexes, B+ trees and hash indexes, write-ahead logging and the ARIES recovery algorithm.",
+          "documents": [
+            {
+              "file": "indexing-and-storage-notes.md",
+              "title": "Storage, Indexing and B+ Trees — Lecture Notes",
+              "description": "Page-based storage, clustered versus non-clustered index costs, B+ tree fan-out, splits and merges, and hash indexes.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            },
+            {
+              "file": "logging-and-recovery-aries.md",
+              "title": "Logging and Crash Recovery: WAL and ARIES",
+              "description": "Steal/no-force policies, the WAL rules, fuzzy checkpoints and a traced run of the ARIES analysis, redo and undo phases.",
+              "format": "docx",
+              "category": "Lecture notes"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

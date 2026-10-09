@@ -1,159 +1,460 @@
-import time
+"""
+SmartStudent AI — grounded conversational RAG.
+
+Flow for every question:
+  1. Work out which courses the user may search (enrollments / taught courses / all).
+  2. Embed the question and search those course collections; keep only chunks
+     that are close enough and belong to current, indexed documents.
+  3. If nothing relevant is found, say so — the model is never asked to guess.
+  4. Otherwise ask the local LLM to answer *only* from the numbered excerpts and
+     cite them as [n]. Answers can be streamed token by token.
+  5. Persist both turns, the citations and an answer status.
+"""
+
+import json
 import logging
-import ollama
+import re
+import time
+from typing import Iterator
+
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
-from apps.documents.models import Document
+from apps.academic.models import Course, Enrollment
+from apps.core.ai import chat_options, get_ollama_client
+from apps.documents.models import Document, DocumentStatus
 from apps.documents.services.embedder import generate_query_embedding
-from apps.documents.services.vector_store import search_relevant_chunks
-from .models import ChatSession, ChatMessage
+from apps.documents.services.vector_store import search_courses
+
+from .models import AnswerStatus, ChatMessage, ChatSession
 
 logger = logging.getLogger("apps.chat")
 
+NOT_FOUND_TEXT = (
+    "I couldn't find this in your course materials. Try rephrasing the question, "
+    "choose a specific course, or ask your teacher to add material on this topic."
+)
+OFFLINE_TEXT = (
+    "The AI model isn't running right now, so I can't write an answer. "
+    "These are the passages from your materials that best match your question:"
+)
+HISTORY_TURNS = 6
 
-def run_chat_rag_query(session: ChatSession, question: str) -> ChatMessage:
+
+# ---------------------------------------------------------------------------
+# Access scope
+# ---------------------------------------------------------------------------
+
+
+def accessible_courses(user):
+    """Courses whose materials this user may search."""
+    qs = Course.objects.select_related("subject")
+    if user.is_admin:
+        return qs
+    if user.is_teacher:
+        return qs.filter(teacher=user)
+    enrolled = Enrollment.objects.filter(student=user, is_active=True).values_list("course_id", flat=True)
+    return qs.filter(id__in=enrolled, is_published=True)
+
+
+def resolve_course_ids(user, course_id=None) -> list[str]:
+    allowed = accessible_courses(user)
+    if course_id:
+        if not allowed.filter(id=course_id).exists():
+            raise PermissionDenied("You don't have access to that course.")
+        return [str(course_id)]
+    return [str(c) for c in allowed.values_list("id", flat=True)]
+
+
+def get_or_create_session(user, question: str, course_id=None, session_id=None) -> ChatSession:
+    if session_id:
+        session = ChatSession.objects.filter(id=session_id, is_active=True).select_related("course").first()
+        if not session:
+            raise NotFound("This conversation no longer exists.")
+        if session.student_id != user.id:
+            raise PermissionDenied("You can't add to someone else's conversation.")
+        # The session's scope wins; re-validate access in case enrollment changed.
+        resolve_course_ids(user, session.course_id)
+        return session
+
+    resolve_course_ids(user, course_id)
+    title = re.sub(r"\s+", " ", question).strip()
+    title = title if len(title) <= 70 else title[:67].rstrip() + "…"
+    return ChatSession.objects.create(student=user, course_id=course_id or None, title=title)
+
+
+# ---------------------------------------------------------------------------
+# Retrieval
+# ---------------------------------------------------------------------------
+
+
+def retrieve(question: str, course_ids: list[str]) -> list[dict]:
     """
-    Executes the conversational RAG pipeline specifically for ChatSession:
-    1. Embeds user's question.
-    2. Searches ChromaDB for course study material.
-    3. Prompts Ollama local LLM with conversation history.
-    4. Saves user and assistant messages to database.
-    5. Returns the generated assistant ChatMessage instance.
+    Hybrid retrieval across the given courses: dense vector search, boosted by an
+    exact keyword pass over stored passages so short, term-heavy questions
+    ("What is overfitting?") still land on the passages that use the term.
     """
-    logger.info(f"Running RAG chat query for session {session.id}")
-    start_time = time.perf_counter()
-
-    # 1. Embed query
-    query_vector = generate_query_embedding(question)
-
-    # 2. Retrieve semantic context from vector store
+    if not course_ids:
+        return []
     top_k = settings.RAG_TOP_K_RESULTS
-    raw_chunks = search_relevant_chunks(
-        course_id=str(session.course_id),
-        query_embedding=query_vector,
-        top_k=top_k
-    )
+    vector = generate_query_embedding(question)
+    raw = search_courses(course_ids, vector, top_k=top_k * 2)
 
-    # Filter chunks based on distance threshold
-    max_distance_threshold = 0.85
-    filtered_chunks = [c for c in raw_chunks if c["distance"] <= max_distance_threshold]
+    candidates: dict[tuple, dict] = {}
+    for c in raw:
+        key = (c["metadata"].get("document_id"), int(c["metadata"].get("chunk_index", -1)))
+        candidates[key] = {"id": c["id"], "content": c["content"], "distance": c["distance"],
+                           "page_number": c["metadata"].get("page_number") or 1}
 
-    context_blocks = []
-    citations = []
-    confidence_scores = []
+    terms = [t for t in _key_terms(question) if len(t) > 3]
+    if terms:
+        from django.db.models import Q
 
-    # Fetch document objects to get titles
-    doc_ids = {c["metadata"]["document_id"] for c in filtered_chunks}
-    docs_map = {str(d.id): d for d in Document.objects.filter(id__in=doc_ids)}
+        from apps.documents.models import DocumentChunk
 
-    for c in filtered_chunks:
-        doc_id = c["metadata"]["document_id"]
-        page_num = c["metadata"].get("page_number", 1)
-        doc_obj = docs_map.get(doc_id)
-        doc_title = doc_obj.title if doc_obj else "Unknown Document"
+        term_q = Q()
+        for t in terms:
+            term_q |= Q(content__icontains=t)
+        for ch in (
+            DocumentChunk.objects.filter(term_q, document__course_id__in=course_ids)
+            .values("document_id", "chunk_index", "content", "page_number", "chroma_id")[:60]
+        ):
+            key = (str(ch["document_id"]), ch["chunk_index"])
+            if key not in candidates:
+                candidates[key] = {"id": ch["chroma_id"], "content": ch["content"], "distance": None,
+                                   "page_number": ch["page_number"] or 1}
 
-        context_blocks.append(
-            f"--- SOURCE: \"{doc_title}\", Page: {page_num} ---\n"
-            f"{c['content']}"
-        )
-        sim = max(0.0, min(1.0, 1.0 - c["distance"]))
-        confidence_scores.append(sim)
+    scored = []
+    for key, c in candidates.items():
+        text = c["content"].lower()
+        hits = sum(1 for t in terms if t in text) / len(terms) if terms else 0.0
+        if c["distance"] is None:
+            if hits < 0.5:
+                continue
+            sim = 0.5 + 0.12 * hits  # keyword-only match: just inside the relevance cut-off
+        else:
+            if c["distance"] > settings.RAG_MAX_DISTANCE and hits < 0.5:
+                continue
+            sim = (1.0 - c["distance"]) + 0.12 * hits
+        scored.append((sim, key, c))
+    if not scored:
+        return []
+    scored.sort(key=lambda x: x[0], reverse=True)
 
-        citations.append({
-            "page_number": int(page_num),
-            "chunk_id": str(c["id"]),
-            "document_title": str(doc_title),
-            "confidence_score": round(float(sim), 4),
-            "excerpt": c["content"][:400]
+    doc_ids = {key[0] for _, key, _ in scored}
+    docs = {
+        str(d.id): d
+        for d in Document.objects.filter(
+            id__in=doc_ids, is_latest=True, processing_status=DocumentStatus.COMPLETED
+        ).select_related("course", "topic__unit")
+    }
+
+    results = []
+    for sim, key, c in scored:
+        doc = docs.get(key[0])
+        if not doc:
+            continue  # deleted, superseded or not yet indexed
+        distance = max(0.0, 1.0 - sim)
+        results.append({
+            "chunk_id": c["id"],
+            "content": c["content"],
+            "distance": distance,
+            "score": round(min(1.0, max(0.0, sim)), 4),
+            "document_id": str(doc.id),
+            "document_title": doc.title,
+            "course_id": str(doc.course_id),
+            "course_code": doc.course.code,
+            "unit": doc.topic.unit.title if doc.topic_id else "",
+            "topic": doc.topic.title if doc.topic_id else "",
+            "page_number": int(c["page_number"]),
         })
+        if len(results) >= top_k:
+            break
+    return results
 
-    context_text = "\n\n".join(context_blocks)
-    overall_confidence = max(confidence_scores) if confidence_scores else 0.0
-    no_context = len(filtered_chunks) == 0
 
-    # 3. Assemble Prompt & Conversational History
-    system_instruction = (
-        "You are 'SmartStudent AI', a helpful, precise academic tutoring assistant.\n"
-        "Your goal is to answer the student's question using ONLY the provided course context.\n\n"
-        "Rules:\n"
-        "1. Answer the question comprehensively and clearly.\n"
-        "2. Refer ONLY to the provided context. Do NOT use any general knowledge, outside facts, "
-        "or assume facts not explicitly mentioned in the context.\n"
-        "3. If the context does not contain enough information to answer the question, or if no context is provided, "
-        "you MUST reply exactly with: \"I'm sorry, but I couldn't find the answer to your question in the uploaded course materials.\"\n"
-        "4. Keep your answer professional, academic, and well-structured. Output clear paragraphs or bullet points."
-    )
+_STOPWORDS = set("""
+a about above after again against all also am an and any are as at be because been before being below between both
+but by can could did do does doing down during each few for from further had has have having he her here hers how i
+if in into is it its itself just me more most my no nor not now of off on once only or other our out over own same she
+should so some such than that the their them then there these they this those through to too under until up very was
+we were what when where which while who whom why will with would you your yours
+explain explained explaining describe define definition difference differences different compare comparison versus vs
+example examples work works working use used using uses mean means meaning important importance give tell show help
+please understand understanding concept concepts simple simply detail detailed step steps briefly short way ways
+calculate calculation find get make like many much one two three first second thing things kind type types
+""".split())
 
-    messages_payload = [
-        {"role": "system", "content": system_instruction}
+
+def _stem(word: str) -> str:
+    return word[:6]
+
+
+def _key_terms(question: str) -> set[str]:
+    words = re.findall(r"[a-z0-9][a-z0-9+\-]*", question.lower())
+    return {w for w in words if w not in _STOPWORDS and (len(w) > 2 or any(ch.isdigit() for ch in w))}
+
+
+def covers_question(question: str, chunks: list[dict]) -> bool:
+    """
+    Cheap guard against answering from loosely related passages: at least half of the
+    question's key terms must appear (by stem) in what was retrieved. Very strong
+    matches skip the check.
+    """
+    if not chunks:
+        return False
+    if chunks[0]["distance"] <= 0.26:
+        return True
+    terms = _key_terms(question)
+    if not terms:
+        return True
+    text = " ".join(c["content"].lower() for c in chunks)
+    text_stems = {_stem(w) for w in re.findall(r"[a-z0-9][a-z0-9+\-]*", text)}
+    found = sum(1 for t in terms if _stem(t) in text_stems or t in text)
+    return found / len(terms) >= 0.6
+
+
+def retrieval_query(session: ChatSession, question: str) -> str:
+    """Follow-ups ("when would I prefer it?") are searched together with the previous question."""
+    previous = session.messages.filter(role="user").order_by("-created_at").values_list("content", flat=True).first()
+    return f"{previous} {question}" if previous else question
+
+
+def find_context(session: ChatSession, question: str, course_ids: list[str]) -> list[dict]:
+    chunks = retrieve(question, course_ids)
+    if covers_question(question, chunks):
+        return chunks
+    query = retrieval_query(session, question)
+    if query != question:
+        chunks = retrieve(query, course_ids)
+        own_terms = _key_terms(question)
+        text = " ".join(c["content"].lower() for c in chunks)
+        on_topic = not own_terms or any(_stem(t) in text for t in own_terms)
+        if on_topic and covers_question(query, chunks):
+            return chunks
+    return []
+
+
+def to_citations(chunks: list[dict]) -> list[dict]:
+    return [
+        {
+            "index": i + 1,
+            "chunk_id": ch["chunk_id"],
+            "document_id": ch["document_id"],
+            "document_title": ch["document_title"],
+            "course_id": ch["course_id"],
+            "course_code": ch["course_code"],
+            "unit": ch["unit"],
+            "topic": ch["topic"],
+            "page_number": ch["page_number"],
+            "score": ch["score"],
+            "excerpt": ch["content"][:420],
+        }
+        for i, ch in enumerate(chunks)
     ]
 
-    # Include chat history (last 6 messages)
-    history_messages = session.messages.order_by("-created_at")[:6]
-    history_messages = list(reversed(history_messages))
 
-    for hist in history_messages:
-        messages_payload.append({
-            "role": "user" if hist.role == "user" else "assistant",
-            "content": hist.content
-        })
+# ---------------------------------------------------------------------------
+# Prompting
+# ---------------------------------------------------------------------------
 
-    # Add the current query with context
-    prompt_content = f"CONTEXT:\n{context_text}\n\nSTUDENT QUESTION: {question}"
-    messages_payload.append({
+
+def _system_prompt(user) -> str:
+    audience = {"student": "a student", "teacher": "a teacher preparing course content", "admin": "an administrator"}.get(
+        user.role, "a user"
+    )
+    return (
+        "You are AuraStudy, a precise academic study assistant. You are talking to "
+        f"{audience}. Answer the question using ONLY the numbered course-material excerpts provided.\n\n"
+        "Rules:\n"
+        "1. Every statement must be supported by the excerpts. Do not add facts from general knowledge.\n"
+        "2. Cite the excerpts you used with bracketed numbers such as [1] or [2][3] at the end of the sentence they support.\n"
+        "3. If the excerpts do not contain the answer, reply with exactly this sentence and nothing else: "
+        f"\"{NOT_FOUND_TEXT}\"\n"
+        "4. If the excerpts only partly answer the question, answer that part and say clearly what the materials do not cover.\n"
+        "5. Write clear Markdown: a direct first sentence, then short paragraphs, bullet lists or a small table when it helps. "
+        "Put formulas and code in backticks.\n"
+        "6. Be concise — usually 120 to 250 words — unless the question asks for a detailed explanation."
+    )
+
+
+def _context_block(chunks: list[dict]) -> str:
+    parts = []
+    for i, ch in enumerate(chunks, start=1):
+        where = " · ".join(p for p in [ch["course_code"], ch["unit"], ch["topic"]] if p)
+        parts.append(f"[{i}] {ch['document_title']} — {where} — page {ch['page_number']}\n{ch['content'].strip()}")
+    return "\n\n".join(parts)
+
+
+def build_messages(user, session: ChatSession, question: str, chunks: list[dict]) -> list[dict]:
+    history = list(
+        session.messages.exclude(status=AnswerStatus.MODEL_UNAVAILABLE).order_by("-created_at")[:HISTORY_TURNS]
+    )
+    messages = [{"role": "system", "content": _system_prompt(user)}]
+    for m in reversed(history):
+        messages.append({"role": m.role, "content": m.content})
+    messages.append({
         "role": "user",
-        "content": prompt_content
+        "content": f"Course-material excerpts:\n\n{_context_block(chunks)}\n\nQuestion: {question}",
     })
+    return messages
 
-    # 4. Invoke LLM via Ollama
-    llm_model = settings.OLLAMA_LLM_MODEL
-    logger.info(f"Sending prompt to Ollama model {llm_model} for session {session.id}")
 
-    try:
-        if no_context:
-            assistant_response = (
-                "I'm sorry, but I couldn't find the answer to your question in the uploaded course materials."
-            )
-        else:
-            client = ollama.Client(host=settings.OLLAMA_BASE_URL)
-            response = client.chat(
-                model=llm_model,
-                messages=messages_payload
-            )
-            assistant_response = response["message"]["content"]
+def classify(answer: str) -> str:
+    text = answer.strip().lower()
+    if not text or text.startswith("i couldn't find this in your course materials") or text.startswith(
+        "i could not find this in your course materials"
+    ):
+        return AnswerStatus.NOT_FOUND
+    return AnswerStatus.ANSWERED
 
-            if not assistant_response or len(assistant_response.strip()) == 0:
-                assistant_response = (
-                    "I'm sorry, but I couldn't find the answer to your question in the uploaded course materials."
-                )
-    except Exception as e:
-        logger.exception(f"Ollama RAG execution failed: {e}")
-        assistant_response = (
-            "⚠️ The AI Assistant is temporarily unavailable. "
-            "Please check that local Ollama service is running on the host."
-        )
 
-    end_time = time.perf_counter()
-    response_time = end_time - start_time
+def offline_answer(chunks: list[dict]) -> str:
+    lines = [OFFLINE_TEXT, ""]
+    for i, ch in enumerate(chunks[:3], start=1):
+        excerpt = re.sub(r"\s+", " ", ch["content"]).strip()
+        excerpt = excerpt if len(excerpt) <= 360 else excerpt[:357].rstrip() + "…"
+        lines.append(f"> **[{i}] {ch['document_title']}, p. {ch['page_number']}** — {excerpt}")
+        lines.append("")
+    return "\n".join(lines).strip()
 
-    # 5. Database Save Turn
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+
+
+def _save_turn(session, question, answer, status, chunks, started, created_at=None) -> ChatMessage:
+    citations = to_citations(chunks) if status != AnswerStatus.NOT_FOUND else []
+    confidence = max((c["score"] for c in chunks), default=0.0)
     with transaction.atomic():
-        # Save user message
-        ChatMessage.objects.create(
-            session=session,
-            role="user",
-            content=question,
-        )
-
-        # Save assistant message
-        assistant_msg = ChatMessage.objects.create(
+        user_msg = ChatMessage.objects.create(session=session, role="user", content=question)
+        assistant = ChatMessage.objects.create(
             session=session,
             role="assistant",
-            content=assistant_response,
-            confidence_score=round(float(overall_confidence), 4),
-            response_time=round(float(response_time), 4),
-            citations=citations
+            content=answer,
+            status=status,
+            citations=citations,
+            confidence_score=round(float(confidence), 4),
+            response_time=round(time.perf_counter() - started, 3),
         )
+        if created_at:  # used by the demo seeder to backdate history
+            ChatMessage.objects.filter(id__in=[user_msg.id, assistant.id]).update(created_at=created_at)
+            ChatSession.objects.filter(id=session.id).update(updated_at=created_at)
+        else:
+            ChatSession.objects.filter(id=session.id).update(updated_at=timezone.now())
+    return assistant
 
-    return assistant_msg
+
+def serialize_answer(session: ChatSession, msg: ChatMessage) -> dict:
+    return {
+        "session_id": str(session.id),
+        "message_id": str(msg.id),
+        "answer": msg.content,
+        "status": msg.status,
+        "citations": msg.citations,
+        "confidence_score": msg.confidence_score,
+        "response_time": msg.response_time,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Entry points
+# ---------------------------------------------------------------------------
+
+
+def ask(user, question: str, course_id=None, session_id=None, created_at=None) -> tuple[ChatSession, ChatMessage]:
+    """Answer a question synchronously (used by the REST endpoint and the seeder)."""
+    question = question.strip()
+    if len(question) < 2:
+        raise ValidationError({"question": "Ask a question."})
+    started = time.perf_counter()
+    session = get_or_create_session(user, question, course_id, session_id)
+    chunks = find_context(session, question, resolve_course_ids(user, session.course_id))
+
+    if not chunks:
+        return session, _save_turn(session, question, NOT_FOUND_TEXT, AnswerStatus.NOT_FOUND, [], started, created_at)
+
+    try:
+        res = get_ollama_client().chat(messages=build_messages(user, session, question, chunks), **chat_options())
+        answer = (res["message"]["content"] or "").strip()
+        status = classify(answer)
+        if status == AnswerStatus.NOT_FOUND:
+            answer = NOT_FOUND_TEXT
+    except Exception as exc:
+        logger.warning(f"LLM unavailable for session {session.id}: {exc}")
+        answer, status = offline_answer(chunks), AnswerStatus.MODEL_UNAVAILABLE
+
+    return session, _save_turn(session, question, answer, status, chunks, started, created_at)
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+def stream_ask(user, question: str, course_id=None, session_id=None) -> tuple[ChatSession, Iterator[str]]:
+    """
+    Validate and open the session up-front (so errors become normal HTTP errors),
+    then return a generator of server-sent events:
+        meta  → {session_id, session_title, citations}
+        token → {text}
+        done  → serialized answer (same shape as `ask`)
+        error → {detail}
+    """
+    question = question.strip()
+    if len(question) < 2:
+        raise ValidationError({"question": "Ask a question."})
+    session = get_or_create_session(user, question, course_id, session_id)
+    course_ids = resolve_course_ids(user, session.course_id)
+
+    def events() -> Iterator[str]:
+        started = time.perf_counter()
+        try:
+            chunks = find_context(session, question, course_ids)
+        except Exception as exc:
+            logger.exception(f"Retrieval failed: {exc}")
+            yield _sse("error", {"detail": "Searching your materials failed. Please try again."})
+            return
+
+        cites = to_citations(chunks)
+        yield _sse("meta", {"session_id": str(session.id), "session_title": session.title, "citations": cites})
+
+        if not chunks:
+            msg = _save_turn(session, question, NOT_FOUND_TEXT, AnswerStatus.NOT_FOUND, [], started)
+            yield _sse("token", {"text": NOT_FOUND_TEXT})
+            yield _sse("done", serialize_answer(session, msg))
+            return
+
+        parts: list[str] = []
+        status = AnswerStatus.ANSWERED
+        try:
+            stream = get_ollama_client().chat(
+                messages=build_messages(user, session, question, chunks), stream=True, **chat_options()
+            )
+            for piece in stream:
+                text = piece.get("message", {}).get("content", "")
+                if text:
+                    parts.append(text)
+                    yield _sse("token", {"text": text})
+            answer = "".join(parts).strip()
+            status = classify(answer)
+            if status == AnswerStatus.NOT_FOUND:
+                answer = NOT_FOUND_TEXT
+        except GeneratorExit:
+            # Client went away mid-answer: keep what was generated.
+            answer = "".join(parts).strip() or NOT_FOUND_TEXT
+            _save_turn(session, question, answer, classify(answer), chunks, started)
+            raise
+        except Exception as exc:
+            logger.warning(f"LLM stream failed for session {session.id}: {exc}")
+            if parts:
+                answer = "".join(parts).strip() + "\n\n_The answer was cut off because the AI model stopped responding._"
+            else:
+                answer, status = offline_answer(chunks), AnswerStatus.MODEL_UNAVAILABLE
+
+        msg = _save_turn(session, question, answer, status, chunks, started)
+        yield _sse("done", serialize_answer(session, msg))
+
+    return session, events()

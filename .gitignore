@@ -198,3 +198,7 @@ instance/
 .webassets-cache
 profile_default/
 ipython_config.py
+
+# Demo environment
+/server/backups/
+/server/src/tmp/

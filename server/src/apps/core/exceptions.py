@@ -148,7 +148,26 @@ def custom_exception_handler(exc, context) -> Response | None:
 
 def _extract_message(data) -> str:
     if isinstance(data, dict):
-        return data.get("detail", str(data))
+        # "detail" / "non_field_errors" carry the primary message. DRF
+        # represents both plain-string details (e.g. NotAuthenticated) and
+        # list-wrapped serializer validation errors (e.g. ValidationError)
+        # under these keys, so both shapes need unwrapping here.
+        for key in ("detail", "non_field_errors"):
+            if key in data:
+                value = data[key]
+                if isinstance(value, (list, tuple)) and value:
+                    return str(value[0])
+                return str(value)
+
+        # Field-level validation errors, e.g. {"email": ["already exists"]}.
+        parts = []
+        for field, value in data.items():
+            message = str(value[0]) if isinstance(value, (list, tuple)) and value else str(value)
+            parts.append(f"{field.replace('_', ' ')}: {message}")
+        if parts:
+            return " | ".join(parts)
+
+        return str(data)
     if isinstance(data, list) and data:
         return str(data[0])
     return str(data)

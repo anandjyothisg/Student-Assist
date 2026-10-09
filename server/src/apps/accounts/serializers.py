@@ -49,12 +49,21 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "avatar_url",
             "bio",
             "phone_number",
+            "department",
+            "designation",
+            "program",
+            "year_of_study",
+            "student_number",
             "is_active",
             "date_joined",
+            "last_login",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("id", "email", "role", "is_active", "date_joined", "created_at", "updated_at")
+        read_only_fields = (
+            "id", "email", "role", "is_active", "date_joined", "last_login", "created_at", "updated_at",
+            "department", "designation", "program", "year_of_study", "student_number",
+        )
 
     def get_full_name(self, obj: User) -> str:
         return obj.get_full_name()
@@ -101,6 +110,11 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "role",
+            "department",
+            "designation",
+            "program",
+            "year_of_study",
+            "student_number",
             "password",
             "confirm_password",
         )
@@ -129,12 +143,47 @@ class UserListSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "email",
+            "first_name",
+            "last_name",
             "full_name",
             "role",
+            "department",
+            "designation",
+            "program",
+            "year_of_study",
+            "student_number",
             "is_active",
             "date_joined",
+            "last_login",
         )
         read_only_fields = fields
 
     def get_full_name(self, obj: User) -> str:
         return obj.get_full_name()
+
+
+class UserAdminUpdateSerializer(serializers.ModelSerializer):
+    """Admin-only edits: role, activation and academic profile."""
+
+    class Meta:
+        model = User
+        fields = (
+            "first_name",
+            "last_name",
+            "role",
+            "is_active",
+            "department",
+            "designation",
+            "program",
+            "year_of_study",
+            "student_number",
+        )
+
+    def validate(self, attrs: dict) -> dict:
+        request = self.context.get("request")
+        if request and self.instance == request.user:
+            if attrs.get("role", self.instance.role) != self.instance.role:
+                raise serializers.ValidationError({"role": "You can't change your own role."})
+            if attrs.get("is_active") is False:
+                raise serializers.ValidationError({"is_active": "You can't deactivate your own account."})
+        return attrs

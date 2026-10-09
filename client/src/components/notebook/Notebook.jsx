@@ -1,188 +1,241 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Trash2, 
-  Check,
-  RotateCw,
-  Copy
-} from 'lucide-react';
-
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { BookOpen, Bookmark, Check, ChevronDown, Copy, Layers, MessageCircle, RotateCw, Search, Trash2 } from 'lucide-react';
+import api, { chatApi, extractErrorMessage } from '../auth/api';
 import { useToast } from '../ui/Toast';
+import { PageHeader } from '../ui/PageHeader';
+import { Button, IconButton } from '../ui/Button';
+import { Badge } from '../ui/Badge';
+import { SearchInput } from '../ui/Input';
+import { Modal } from '../ui/Modal';
+import { EmptyState } from '../ui/EmptyState';
+import { ErrorState } from '../ui/ErrorState';
+import { Skeleton } from '../ui/Skeleton';
+import { Markdown } from '../ui/Markdown';
+import { copyText } from '../ui/clipboard';
 
-export function Notebook() {
-  const toast = useToast();
-  const [activeTab, setActiveTab] = useState('answers');
-  const [answers, setAnswers] = useState([]);
-  const [flashcards, setFlashcards] = useState([]);
-  const [flippedCards, setFlippedCards] = useState(new Set());
-  const [copiedId, setCopiedId] = useState(null);
+const DIFFICULTY_TONE = { Easy: 'success', Medium: 'warning', Hard: 'error' };
 
-  useEffect(() => {
-    const storedAnswers = localStorage.getItem('nb_answers');
-    if (storedAnswers) {
-      setAnswers(JSON.parse(storedAnswers));
-    } else {
-      setAnswers([]);
-    }
+function formatDate(iso) {
+  try { return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return ''; }
+}
 
-    const storedFc = localStorage.getItem('nb_flashcards');
-    if (storedFc) {
-      setFlashcards(JSON.parse(storedFc));
-    } else {
-      setFlashcards([]);
-    }
-  }, []);
-
-  const handleToggleFlip = (id) => {
-    setFlippedCards(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const handleDeleteAnswer = (id) => {
-    const updated = answers.filter(a => a.id !== id);
-    setAnswers(updated);
-    localStorage.setItem('nb_answers', JSON.stringify(updated));
-    toast.info('Saved note removed.');
-  };
-
-  const handleDeleteFlashcard = (id) => {
-    const updated = flashcards.filter(f => f.id !== id);
-    setFlashcards(updated);
-    localStorage.setItem('nb_flashcards', JSON.stringify(updated));
-    toast.info('Flashcard deleted.');
-  };
-
-  const handleCopy = (id, text) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
+function AnswerCard({ answer, onDelete, onNavigate }) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const long = (answer.content || '').length > 480;
+  const sources = [...new Map((answer.citations || []).map((c) => [`${c.document_id}-${c.page_number}`, c])).values()];
 
   return (
-    <div className="flex flex-col gap-6 font-sans">
-      
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div>
-          <h1 className="hero-title text-3xl font-normal" style={{ color: 'var(--fg)' }}>
-            Study Notebook
-          </h1>
-          <p className="text-xs font-normal mt-1" style={{ color: 'var(--fg-3)' }}>
-            Centralized repository of saved AI responses, revision flashcards, and annotations.
-          </p>
+    <article className="group rounded-lg border border-border bg-surface transition-colors hover:border-border-strong">
+      <header className="flex items-start justify-between gap-3 px-5 pt-4">
+        <div className="min-w-0">
+          <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-fg-3">
+            {answer.course_code && <Badge tone="accent" mono>{answer.course_code}</Badge>}
+            <time dateTime={answer.created_at}>Saved {formatDate(answer.created_at)}</time>
+          </div>
+          <h3 className="text-[15px] font-semibold leading-snug text-fg">{answer.question}</h3>
         </div>
+        <div className="-mr-2 -mt-1 flex shrink-0 items-center transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
+          <IconButton icon={copied ? Check : Copy} label={copied ? 'Copied' : 'Copy answer'} size="sm" onClick={async () => { if (await copyText(answer.content)) { setCopied(true); setTimeout(() => setCopied(false), 1600); } }} />
+          <IconButton icon={Trash2} label="Remove from notebook" size="sm" onClick={() => onDelete(answer)} className="hover:!text-error" />
+        </div>
+      </header>
+      <div className="px-5 pt-3 pb-4">
+        <div className={`relative ${!expanded && long ? 'max-h-44 overflow-hidden' : ''}`}>
+          <Markdown className="!text-[14px]">{answer.content}</Markdown>
+          {!expanded && long && <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-surface to-transparent" />}
+        </div>
+        {long && (
+          <button onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} className="mt-2 inline-flex items-center gap-1 rounded-sm text-[13px] font-medium text-fg-2 transition-colors hover:text-fg">
+            {expanded ? 'Show less' : 'Show full answer'}
+            <ChevronDown className={`size-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden />
+          </button>
+        )}
+        {sources.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border pt-3">
+            {sources.map((c) => (
+              <button
+                key={`${c.document_id}-${c.page_number}`}
+                onClick={() => onNavigate?.('documents', { doc: c.document_id, page: c.page_number })}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-sm bg-subtle px-2 py-1 text-xs text-fg-2 transition-colors hover:bg-hover hover:text-fg"
+              >
+                <BookOpen className="size-3 shrink-0" aria-hidden />
+                <span className="truncate">{c.document_title}</span>
+                <span className="shrink-0 font-mono text-[10.5px] text-fg-3">p.{c.page_number}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
 
-        {/* Tab Selector Pill */}
-        <div className="flex items-center gap-1 p-1 rounded-md self-start sm:self-auto" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-          <button
-            onClick={() => setActiveTab('answers')}
-            className="px-3.5 py-1.5 rounded-sm text-xs font-medium transition-all cursor-pointer"
-            style={{
-              background: activeTab === 'answers' ? 'var(--bg-subtle)' : 'transparent',
-              color: activeTab === 'answers' ? 'var(--fg)' : 'var(--fg-3)',
-              boxShadow: activeTab === 'answers' ? 'var(--shadow-sm)' : 'none',
-            }}
-          >
-            Saved Answers ({answers.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('flashcards')}
-            className="px-3.5 py-1.5 rounded-sm text-xs font-medium transition-all cursor-pointer"
-            style={{
-              background: activeTab === 'flashcards' ? 'var(--bg-subtle)' : 'transparent',
-              color: activeTab === 'flashcards' ? 'var(--fg)' : 'var(--fg-3)',
-              boxShadow: activeTab === 'flashcards' ? 'var(--shadow-sm)' : 'none',
-            }}
-          >
-            Flashcards ({flashcards.length})
-          </button>
+function Flashcard({ card, flipped, onFlip }) {
+  const face = 'flip-face flex min-h-[210px] flex-col rounded-lg border border-border p-5';
+  return (
+    <div className="flip-scene">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-pressed={flipped}
+        aria-label={flipped ? `Answer: ${card.answer}` : `Question: ${card.question}. Press to reveal the answer.`}
+        onClick={onFlip}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFlip(); } }}
+        data-flipped={flipped}
+        className="flip-card cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+      >
+        <div className={`${face} bg-surface`}>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-fg-3">Question</span>
+            {card.difficulty && <Badge tone={DIFFICULTY_TONE[card.difficulty] || 'neutral'}>{card.difficulty}</Badge>}
+          </div>
+          <p className="my-auto py-4 text-[15.5px] font-semibold leading-snug text-fg">{card.question}</p>
+          <div className="flex items-center justify-between text-xs text-fg-3">
+            <span className="truncate">{card.category || ''}</span>
+            <span className="inline-flex items-center gap-1"><RotateCw className="size-3" aria-hidden /> Reveal</span>
+          </div>
+        </div>
+        <div className={`${face} flip-back bg-subtle`} aria-hidden={!flipped}>
+          <span className="text-xs font-medium text-accent">Answer</span>
+          <p className="my-auto py-4 text-[14px] leading-relaxed text-fg">{card.answer}</p>
+          <div className="flex justify-end text-xs text-fg-3"><span className="inline-flex items-center gap-1"><RotateCw className="size-3" aria-hidden /> Back</span></div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Content Canvas */}
-      {activeTab === 'answers' ? (
-        <div className="grid grid-cols-1 gap-4">
-          {answers.length === 0 ? (
-            <div className="p-12 text-center border border-dashed rounded-md text-xs" style={{ borderColor: 'var(--border)', color: 'var(--fg-3)' }}>
-              No answers saved yet. Click 'Save to Notebook' on any AI Assistant response to bookmark it here.
-            </div>
-          ) : (
-            answers.map((ans) => (
-              <div key={ans.id} className="p-6 rounded-md shadow-premium-sm flex flex-col gap-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-                <div className="flex items-center justify-between pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
-                  <div className="flex items-center gap-2">
-                    <span className="keycap">{ans.course_code || 'STUDY NOTE'}</span>
-                    <h3 className="text-sm font-semibold font-sans" style={{ color: 'var(--fg)' }}>{ans.query}</h3>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--fg-3)' }}>
-                    <button onClick={() => handleCopy(ans.id, ans.content)} className="p-1.5 cursor-pointer hover:opacity-80">
-                      {copiedId === ans.id ? <Check className="w-3.5 h-3.5" style={{ color: 'var(--success)' }} /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
-                    <button onClick={() => handleDeleteAnswer(ans.id)} className="p-1.5 cursor-pointer hover:opacity-80" style={{ color: 'var(--error)' }}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-                <div className="text-xs leading-relaxed font-sans max-w-none whitespace-pre-wrap" style={{ color: 'var(--fg-2)' }}>
-                  {ans.content}
-                </div>
-              </div>
-            ))
-          )}
+export function Notebook({ onNavigate }) {
+  const toast = useToast();
+  const [tab, setTab] = useState('answers');
+  const [answers, setAnswers] = useState([]);
+  const [decks, setDecks] = useState([]);
+  const [state, setState] = useState('loading');
+  const [flipped, setFlipped] = useState(() => new Set());
+  const [query, setQuery] = useState('');
+  const [confirm, setConfirm] = useState(null); // {kind, item}
+
+  const load = useCallback(async () => {
+    setState('loading');
+    try {
+      const [a, g] = await Promise.all([
+        chatApi.saved(),
+        api.get('/assistant/generated/', { params: { content_type: 'flashcard', mine: 'true', page_size: 50 } }),
+      ]);
+      setAnswers(a);
+      setDecks((g.data.results ?? g.data).filter((d) => d.content?.cards?.length));
+      setState('ready');
+    } catch {
+      setState('error');
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const q = query.trim().toLowerCase();
+  const visibleAnswers = useMemo(() => (q ? answers.filter((a) => `${a.question} ${a.content}`.toLowerCase().includes(q)) : answers), [answers, q]);
+  const visibleDecks = useMemo(() => decks
+    .map((d) => ({ ...d, cards: d.content.cards.filter((c) => !q || `${c.question} ${c.answer} ${c.category || ''}`.toLowerCase().includes(q)) }))
+    .filter((d) => d.cards.length), [decks, q]);
+  const cardCount = decks.reduce((n, d) => n + d.content.cards.length, 0);
+
+  const remove = async () => {
+    const { kind, item } = confirm;
+    setConfirm(null);
+    try {
+      if (kind === 'answer') {
+        await chatApi.unsave(item.id);
+        setAnswers((list) => list.filter((a) => a.id !== item.id));
+        toast.success('Removed from your notebook.');
+      } else {
+        await api.delete(`/assistant/generated/${item.id}/`);
+        setDecks((list) => list.filter((d) => d.id !== item.id));
+        toast.success('Deck deleted.');
+      }
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    }
+  };
+
+  const toggle = (key) => setFlipped((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const deckTitle = (d) => d.title.replace(/^AI Generated Flashcards for\s*/i, '');
+
+  const TABS = [
+    { id: 'answers', label: 'Saved answers', icon: Bookmark, count: answers.length },
+    { id: 'flashcards', label: 'Flashcards', icon: Layers, count: cardCount },
+  ];
+
+  return (
+    <div className="flex flex-col gap-8">
+      <PageHeader title="Notebook" description="Answers you saved from Ask and flashcard decks made from your course materials — synced to your account." />
+
+      <div className="flex flex-col gap-3 border-b border-border sm:flex-row sm:items-end sm:justify-between">
+        <div role="tablist" aria-label="Notebook sections" className="-mb-px flex gap-5">
+          {TABS.map(({ id, label, icon: Icon, count }) => {
+            const active = tab === id;
+            return (
+              <button key={id} role="tab" aria-selected={active} onClick={() => { setTab(id); setQuery(''); }}
+                className={`inline-flex items-center gap-2 border-b-2 pb-3 text-[14px] font-medium transition-colors ${active ? 'border-fg text-fg' : 'border-transparent text-fg-3 hover:text-fg'}`}>
+                <Icon className="size-4" aria-hidden />{label}
+                <span className={`rounded-sm px-1.5 text-xs tabular ${active ? 'bg-subtle text-fg-2' : 'text-fg-3'}`}>{state === 'ready' ? count : '–'}</span>
+              </button>
+            );
+          })}
         </div>
+        {state === 'ready' && (tab === 'answers' ? answers.length : cardCount) > 0 && (
+          <SearchInput icon={Search} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={tab === 'answers' ? 'Search saved answers' : 'Search flashcards'} aria-label="Search notebook" className="mb-3 w-full sm:w-64" />
+        )}
+      </div>
+
+      {state === 'loading' ? (
+        <div className="flex flex-col gap-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 !rounded-lg" />)}</div>
+      ) : state === 'error' ? (
+        <div className="rounded-lg border border-border bg-surface"><ErrorState title="Couldn’t load your notebook" onRetry={load} /></div>
+      ) : tab === 'answers' ? (
+        answers.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border-strong">
+            <EmptyState icon={BookOpen} title="Nothing saved yet" description="When an answer in Ask is worth keeping, choose “Save to notebook” and it will appear here." action={<Button iconLeft={MessageCircle} onClick={() => onNavigate?.('assistant')}>Ask a question</Button>} />
+          </div>
+        ) : visibleAnswers.length === 0 ? (
+          <EmptyState compact icon={Search} title="No matches" description={`No saved answers mention “${query}”.`} />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {visibleAnswers.map((a) => <AnswerCard key={a.id} answer={a} onNavigate={onNavigate} onDelete={(item) => setConfirm({ kind: 'answer', item })} />)}
+          </div>
+        )
+      ) : decks.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border-strong">
+          <EmptyState icon={Layers} title="No flashcards yet" description="Open a document in Sources and choose “Make flashcards” to turn it into a revision deck." action={<Button iconLeft={BookOpen} onClick={() => onNavigate?.('documents')}>Open Sources</Button>} />
+        </div>
+      ) : visibleDecks.length === 0 ? (
+        <EmptyState compact icon={Search} title="No matches" description={`No flashcards mention “${query}”.`} />
       ) : (
-        /* Flashcards Grid */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {flashcards.length === 0 ? (
-            <div className="col-span-full p-12 text-center border border-dashed rounded-md text-xs" style={{ borderColor: 'var(--border)', color: 'var(--fg-3)' }}>
-              No flashcards created yet.
-            </div>
-          ) : (
-            flashcards.map((fc) => {
-              const isFlipped = flippedCards.has(fc.id);
-              return (
-                <div
-                  key={fc.id}
-                  onClick={() => handleToggleFlip(fc.id)}
-                  className="min-h-[180px] p-6 rounded-md shadow-premium-sm cursor-pointer flex flex-col justify-between transition-all duration-200 group relative"
-                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
-                >
-                  <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--fg-3)' }}>
-                    <span className="keycap">{fc.category || 'CARD'}</span>
-                    <div className="flex items-center gap-1">
-                      <RotateCw className="w-3 h-3 transition-colors" />
-                      <span>{isFlipped ? 'Answer' : 'Question'}</span>
-                    </div>
-                  </div>
-
-                  <div className="my-auto text-center py-4">
-                    {isFlipped ? (
-                      <p className="text-sm font-semibold font-mono leading-relaxed" style={{ color: 'var(--accent)' }}>{fc.answer}</p>
-                    ) : (
-                      <p className="text-sm font-medium leading-relaxed font-sans" style={{ color: 'var(--fg)' }}>{fc.question}</p>
-                    )}
-                  </div>
-
-                  <div className="flex justify-end pt-2" style={{ borderTop: '1px solid var(--border)' }}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteFlashcard(fc.id);
-                      }}
-                      className="text-[11px] cursor-pointer hover:underline"
-                      style={{ color: 'var(--error)' }}
-                    >
-                      Remove
-                    </button>
-                  </div>
+        <div className="flex flex-col gap-10">
+          {visibleDecks.map((d) => (
+            <section key={d.id} aria-label={deckTitle(d)}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate text-[15px] font-semibold text-fg">{deckTitle(d)}</h2>
+                  <p className="text-xs text-fg-3">{d.cards.length} cards · made {formatDate(d.created_at)} · tap a card to reveal the answer</p>
                 </div>
-              );
-            })
-          )}
+                <IconButton icon={Trash2} label="Delete deck" size="sm" onClick={() => setConfirm({ kind: 'deck', item: d })} className="hover:!text-error" />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {d.cards.map((c, i) => <Flashcard key={`${d.id}-${i}`} card={c} flipped={flipped.has(`${d.id}-${i}`)} onFlip={() => toggle(`${d.id}-${i}`)} />)}
+              </div>
+            </section>
+          ))}
         </div>
       )}
+
+      <Modal
+        isOpen={!!confirm}
+        onClose={() => setConfirm(null)}
+        title={confirm?.kind === 'deck' ? 'Delete this deck?' : 'Remove this answer?'}
+        description={confirm?.kind === 'deck' ? 'All cards in the deck will be deleted.' : 'The conversation it came from stays in your Ask history.'}
+        size="sm"
+        footer={<><Button variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button><Button variant="danger" onClick={remove}>{confirm?.kind === 'deck' ? 'Delete deck' : 'Remove'}</Button></>}
+      />
     </div>
   );
 }

@@ -35,7 +35,7 @@ def process_document(self, document_id: str) -> dict:
     from apps.documents.services.vector_store import upsert_document_chunks, delete_document_chunks
 
     try:
-        document = Document.objects.select_related("course").get(id=document_id)
+        document = Document.objects.select_related("course", "topic__unit").get(id=document_id)
     except Document.DoesNotExist:
         logger.error(f"[process_document] Document {document_id} not found.")
         return {"status": "error", "detail": "Document not found."}
@@ -61,6 +61,10 @@ def process_document(self, document_id: str) -> dict:
         # Step 1: Text extraction
         pages = extract_text_by_page(document.file.path, document.file_type)
         page_count = len(pages)
+        if not any((p.get("text") or "").strip() for p in pages):
+            raise ValueError(
+                "No readable text was found in this file. Scanned PDFs need OCR before they can be indexed."
+            )
 
         # Step 2: Chunking
         chunks = split_into_chunks(
@@ -100,11 +104,19 @@ def process_document(self, document_id: str) -> dict:
             DocumentChunk.objects.bulk_create(db_chunks)
 
             # Step 6: Upsert to ChromaDB
+            topic = document.topic
             upsert_document_chunks(
                 course_id=str(document.course_id),
                 document_id=str(document.id),
                 chunks=chunks,
-                embeddings=embeddings
+                embeddings=embeddings,
+                extra_metadata={
+                    "course_code": document.course.code,
+                    "subject_id": str(document.course.subject_id),
+                    "document_title": document.title,
+                    "topic": topic.title if topic else "",
+                    "unit": topic.unit.title if topic else "",
+                },
             )
 
             # --- Update status to completed ---
@@ -154,5 +166,8 @@ def process_document(self, document_id: str) -> dict:
         except Exception as inner_exc:
             logger.error(f"[process_document] Could not update failure status: {inner_exc}")
 
+        # In-process (eager) runs report the failure instead of blocking on retries.
+        if self.request.is_eager:
+            return {"status": "failed", "document_id": document_id, "error": str(exc)}
         # Retry with exponential back-off
         raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1))

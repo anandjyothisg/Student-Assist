@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.accounts.managers import CustomUserManager
+from apps.core.models import BaseModel
 
 
 def avatar_upload_path(instance: "User", filename: str) -> str:
@@ -62,6 +63,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
     bio = models.TextField(_("biography"), blank=True)
     phone_number = models.CharField(max_length=20, blank=True)
+
+    # Academic profile
+    department = models.CharField(_("department"), max_length=150, blank=True)
+    designation = models.CharField(_("designation"), max_length=120, blank=True)
+    program = models.CharField(_("program"), max_length=150, blank=True)
+    year_of_study = models.PositiveSmallIntegerField(_("year of study"), null=True, blank=True)
+    student_number = models.CharField(_("student number"), max_length=30, blank=True)
     is_active = models.BooleanField(_("active"), default=True)
     is_staff = models.BooleanField(_("staff status"), default=False)
     date_joined = models.DateTimeField(_("date joined"), default=timezone.now)
@@ -109,3 +117,32 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def is_student(self) -> bool:
         return self.role == UserRole.STUDENT
+
+
+class PasswordResetOTP(BaseModel):
+    """
+    A single-use, time-limited OTP issued for the forgot-password flow.
+
+    The code itself is never stored in plaintext — only its hash (via
+    Django's password hasher) — so a database read alone can't be used
+    to reset an account.
+    """
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="password_reset_otps",
+    )
+    otp_hash = models.CharField(max_length=128)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    is_used = models.BooleanField(default=False)
+    expires_at = models.DateTimeField()
+
+    MAX_ATTEMPTS = 5
+
+    class Meta:
+        db_table = "accounts_password_reset_otp"
+        ordering = ["-created_at"]
+
+    def is_valid(self) -> bool:
+        return not self.is_used and self.attempts < self.MAX_ATTEMPTS and timezone.now() < self.expires_at

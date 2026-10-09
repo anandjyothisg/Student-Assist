@@ -1,78 +1,43 @@
-﻿import React from 'react';
-import { motion } from 'framer-motion';
-import { AlertCircle, RefreshCw, WifiOff } from 'lucide-react';
+import React from 'react';
+import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { Button } from './Button';
 
 /**
- * ErrorState — Blueprint spec:
- * - Calm, not alarming. Error color (#DC2626) on icon only.
- * - Title: fg-primary 15px semibold. Description: fg-muted 13px.
- * - ONE retry action maximum.
- * - Specialized variant for network errors.
- * - Fade in at 180ms ease-out.
- *
- * Usage:
- *   <ErrorState
- *     title="Something went wrong"
- *     description="Could not load your conversations."
- *     onRetry={refetch}
- *   />
- *
- *   <ErrorState variant="network" onRetry={refetch} />
+ * ErrorState — inline failure message with optional retry.
+ * `variant="inline"` renders a compact banner instead of a centred block.
  */
-export function ErrorState({
-  variant     = 'generic',  // 'generic' | 'network' | 'notfound' | 'permission'
-  title,
-  description,
-  onRetry,
-  className   = '',
-}) {
-  const defaults = {
-    generic:    { icon: AlertCircle, title: 'Something went wrong',    desc: 'An unexpected error occurred. Please try again.' },
-    network:    { icon: WifiOff,     title: 'No connection',            desc: 'Check your internet connection and try again.' },
-    notfound:   { icon: AlertCircle, title: 'Not found',               desc: 'The resource you are looking for does not exist.' },
-    permission: { icon: AlertCircle, title: 'Access denied',           desc: 'You do not have permission to view this content.' },
-  };
-
-  const config = defaults[variant] ?? defaults.generic;
-  const Icon = config.icon;
-  const resolvedTitle = title ?? config.title;
-  const resolvedDesc  = description ?? config.desc;
+export function ErrorState({ title = 'Something went wrong', description, onRetry, retryLabel = 'Try again', variant = 'block', className = '' }) {
+  if (variant === 'inline') {
+    return (
+      <div role="alert" className={`flex items-start gap-3 rounded-lg border border-error/25 bg-error-dim px-4 py-3 ${className}`}>
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-error" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-fg">{title}</p>
+          {description && <p className="mt-0.5 text-[13px] text-fg-2">{description}</p>}
+        </div>
+        {onRetry && (
+          <Button size="xs" variant="secondary" iconLeft={RotateCcw} onClick={onRetry} className="shrink-0">
+            {retryLabel}
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.18, ease: [0.0, 0, 0.2, 1] }}
-      className={`flex flex-col items-center justify-center text-center px-6 py-12 gap-4 ${className}`}
-    >
-      {/* Icon in error-tinted container */}
-      <div className="w-10 h-10 rounded-xl bg-[#DC2626]/8 border border-[#DC2626]/15 flex items-center justify-center flex-shrink-0">
-        <Icon className="w-5 h-5 text-[#DC2626]" />
+    <div role="alert" className={`flex flex-col items-center justify-center gap-4 px-6 py-12 text-center ${className}`}>
+      <span className="inline-flex size-11 items-center justify-center rounded-xl bg-error-dim text-error">
+        <AlertTriangle className="size-5" aria-hidden />
+      </span>
+      <div className="flex max-w-sm flex-col gap-1.5">
+        <h3 className="text-[15px] font-semibold text-fg">{title}</h3>
+        {description && <p className="text-[13px] leading-relaxed text-fg-3">{description}</p>}
       </div>
-
-      <div className="flex flex-col gap-1.5 max-w-xs">
-        <h3 className="font-sans text-[15px] font-semibold text-fg-primary">
-          {resolvedTitle}
-        </h3>
-        <p className="font-sans text-[13px] text-fg-muted leading-relaxed">
-          {resolvedDesc}
-        </p>
-      </div>
-
       {onRetry && (
-        <button
-          onClick={onRetry}
-          className={[
-            'mt-1 inline-flex items-center gap-2 h-8 px-4 rounded-lg border border-border-base',
-            'font-sans text-[13px] font-medium text-fg-secondary bg-bg-surface',
-            'hover:border-fg-muted/40 hover:text-fg-primary',
-            'transition-colors duration-150 cursor-pointer',
-          ].join(' ')}
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Try again
-        </button>
+        <Button size="sm" variant="secondary" iconLeft={RotateCcw} onClick={onRetry}>
+          {retryLabel}
+        </Button>
       )}
-    </motion.div>
+    </div>
   );
 }

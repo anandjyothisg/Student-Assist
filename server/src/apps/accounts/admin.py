@@ -6,7 +6,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
 
-from apps.accounts.models import User
+from apps.accounts.models import PasswordResetOTP, User
 
 
 @admin.register(User)
@@ -78,3 +78,19 @@ class UserAdmin(BaseUserAdmin):
 
     get_full_name.short_description = "Full Name"
     get_full_name.admin_order_field = "first_name"
+
+
+@admin.register(PasswordResetOTP)
+class PasswordResetOTPAdmin(admin.ModelAdmin):
+    """Read-only visibility for support — never exposes the OTP itself, only its hash."""
+
+    list_display = ("user", "is_used", "attempts", "expires_at", "created_at")
+    list_filter = ("is_used",)
+    search_fields = ("user__email",)
+    readonly_fields = ("id", "user", "otp_hash", "attempts", "is_used", "expires_at", "created_at", "updated_at")
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:
+        return False

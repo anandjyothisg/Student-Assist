@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle2, AlertTriangle, AlertCircle, Info } from 'lucide-react';
 
@@ -17,13 +17,13 @@ export function ToastProvider({ children }) {
     if (duration > 0) setTimeout(() => remove(id), duration);
   }, [remove]);
 
-  const api = {
-    success: useCallback((m, d) => add(m, 'success', d), [add]),
-    error:   useCallback((m, d) => add(m, 'error',   d), [add]),
-    warning: useCallback((m, d) => add(m, 'warning', d), [add]),
-    info:    useCallback((m, d) => add(m, 'info',    d), [add]),
+  const api = useMemo(() => ({
+    success: (m, d) => add(m, 'success', d),
+    error:   (m, d) => add(m, 'error', d),
+    warning: (m, d) => add(m, 'warning', d),
+    info:    (m, d) => add(m, 'info', d),
     add, remove,
-  };
+  }), [add, remove]);
 
   return (
     <ToastContext.Provider value={api}>
@@ -43,8 +43,10 @@ function ToastContainer({ toasts, onClose }) {
   return (
     <div
       role="region"
+      aria-label="Notifications"
       aria-live="polite"
-      className="fixed top-4 right-4 z-[200] flex flex-col gap-2 w-full max-w-[320px] pointer-events-none"
+      className="pointer-events-none fixed inset-x-3 top-[calc(var(--header-h)+0.75rem+env(safe-area-inset-top,0px))] flex flex-col items-center gap-2 md:inset-x-auto md:top-auto md:right-5 md:bottom-5 md:flex-col-reverse md:items-end"
+      style={{ zIndex: 'var(--z-toast)' }}
     >
       <AnimatePresence initial={false}>
         {toasts.map((t) => (
@@ -56,63 +58,33 @@ function ToastContainer({ toasts, onClose }) {
 }
 
 const toastConfig = {
-  success: {
-    icon: <CheckCircle2 className="w-4 h-4 flex-shrink-0" />,
-    iconColor: 'var(--success)',
-    borderColor: 'var(--success-dim)',
-  },
-  error: {
-    icon: <AlertCircle className="w-4 h-4 flex-shrink-0" />,
-    iconColor: 'var(--error)',
-    borderColor: 'var(--error-dim)',
-  },
-  warning: {
-    icon: <AlertTriangle className="w-4 h-4 flex-shrink-0" />,
-    iconColor: 'var(--warning)',
-    borderColor: 'var(--warning-dim)',
-  },
-  info: {
-    icon: <Info className="w-4 h-4 flex-shrink-0" />,
-    iconColor: 'var(--fg-3)',
-    borderColor: 'var(--border)',
-  },
+  success: { Icon: CheckCircle2, tone: 'text-success' },
+  error:   { Icon: AlertCircle,  tone: 'text-error' },
+  warning: { Icon: AlertTriangle, tone: 'text-warning' },
+  info:    { Icon: Info,         tone: 'text-fg-3' },
 };
 
 function ToastItem({ toast, onClose }) {
-  const config = toastConfig[toast.type] ?? toastConfig.info;
+  const { Icon, tone } = toastConfig[toast.type] ?? toastConfig.info;
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, x: 20, y: 0 }}
-      animate={{ opacity: 1, x: 0, y: 0 }}
-      exit={{ opacity: 0, x: 20, transition: { duration: 0.15 } }}
-      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-      className="pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-md"
-      style={{
-        background: 'var(--bg-surface)',
-        border: `1px solid ${config.borderColor}`,
-        boxShadow: 'var(--shadow-lg)',
-      }}
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.15 } }}
+      transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+      className="pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border border-border bg-surface py-3 pr-2.5 pl-3.5 shadow-lg"
     >
-      <span style={{ color: config.iconColor, marginTop: '1px' }}>
-        {config.icon}
-      </span>
-      <p
-        className="flex-1 font-sans text-[13px] font-medium leading-snug"
-        style={{ color: 'var(--fg)' }}
-      >
-        {toast.message}
-      </p>
+      <Icon className={`mt-px size-4 shrink-0 ${tone}`} aria-hidden />
+      <p className="flex-1 text-[13px] font-medium leading-snug text-fg">{toast.message}</p>
       <button
         onClick={onClose}
-        className="flex-shrink-0 rounded-md p-0.5 transition-colors duration-150 cursor-pointer"
-        style={{ color: 'var(--fg-3)' }}
-        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--fg)'}
-        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--fg-3)'}
-        aria-label="Dismiss"
+        className="-my-1 inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-fg-3 transition-colors hover:bg-subtle hover:text-fg"
+        aria-label="Dismiss notification"
       >
-        <X className="w-3.5 h-3.5" />
+        <X className="size-3.5" />
       </button>
     </motion.div>
   );

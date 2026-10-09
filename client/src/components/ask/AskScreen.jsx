@@ -1,680 +1,610 @@
-import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FileText, 
-  Copy, 
-  Check, 
-  ArrowUp, 
-  Sparkles, 
-  BookOpen, 
-  Bookmark, 
-  X,
-  ExternalLink
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import {
+  AlertTriangle, ArrowUpRight, Bookmark, BookmarkCheck, Check, ChevronDown, Copy, ExternalLink, FileText,
+  History, Info, MessageSquarePlus, Pencil, SearchX, Trash2, X,
 } from 'lucide-react';
-import api from '../auth/api';
+import api, { chatApi, extractErrorMessage, streamChat } from '../auth/api';
 import { useToast } from '../ui/Toast';
+import { Composer } from '../ui/Composer';
+import { Markdown } from '../ui/Markdown';
+import { Modal, Sheet } from '../ui/Modal';
+import { Button, IconButton } from '../ui/Button';
+import { Badge } from '../ui/Badge';
+import { ErrorState } from '../ui/ErrorState';
+import { Skeleton } from '../ui/Skeleton';
+import { BrandMark } from '../ui/BrandMark';
+import { copyText } from '../ui/clipboard';
+import { useMediaQuery } from '../ui/useMediaQuery';
+import { useRoute } from '../layout/useRoute';
+import { replaceParams } from '../layout/navConfig';
 
-const SUGGESTION_CHIPS = [
-  { id: 1, text: "Summarize recent course materials and lecture topics" },
-  { id: 2, text: "What are the core exam concepts in my enrolled subjects?" },
-  { id: 3, text: "Explain complex theoretical concepts step by step" },
-];
+const SUGGESTIONS = {
+  'ML-302': 'How does gradient descent update the weights in linear regression?',
+  'CS-305': 'What is the difference between 3NF and BCNF?',
+  'CS-308': 'Explain the TCP three-way handshake.',
+  'AI-301': 'Why is A* search optimal when the heuristic is admissible?',
+  'CS-201': 'Why does quicksort take O(n²) time in the worst case?',
+  'CS-304': 'What are the four necessary conditions for deadlock?',
+};
 
-function CodeBlock({ lang, content }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 
+function groupSessions(sessions) {
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const groups = { Today: [], 'Previous 7 days': [], Earlier: [] };
+  sessions.forEach((s) => {
+    const d = new Date(s.updated_at);
+    if (d >= startToday) groups.Today.push(s);
+    else if (now - d < 7 * 86400000) groups['Previous 7 days'].push(s);
+    else groups.Earlier.push(s);
+  });
+  return Object.entries(groups).filter(([, v]) => v.length);
+}
+
+/* ─── Conversation history list ───────────────────────────────────────── */
+function ConversationList({ sessions, state, activeId, onSelect, onRename, onDelete }) {
+  const [editing, setEditing] = useState(null);
+  const [title, setTitle] = useState('');
+
+  if (state === 'loading') {
+    return <div className="flex flex-col gap-2 p-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9" />)}</div>;
+  }
+  if (!sessions.length) {
+    return <p className="px-4 py-6 text-[13px] leading-relaxed text-fg-3">Your conversations will appear here.</p>;
+  }
   return (
-    <div
-      className="my-5 overflow-hidden rounded-xl font-mono text-[13px]"
-      style={{
-        background: 'var(--bg-surface)',
-        border: '1px solid var(--border)',
-      }}
-    >
-      <div
-        className="flex items-center justify-between px-4 py-2 text-[11px] font-sans select-none"
-        style={{
-          borderBottom: '1px solid var(--border)',
-          background: 'var(--bg-subtle)',
-          color: 'var(--fg-3)',
-        }}
-      >
-        <span className="font-medium uppercase tracking-wider">{lang || 'code'}</span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 transition-colors cursor-pointer"
-          style={{ color: 'var(--fg-3)' }}
-          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--fg)'}
-          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--fg-3)'}
-        >
-          {copied
-            ? <Check className="w-3.5 h-3.5" style={{ color: 'var(--success)' }} />
-            : <Copy className="w-3.5 h-3.5" />
-          }
-          <span>{copied ? 'Copied' : 'Copy'}</span>
-        </button>
-      </div>
-      <pre className="p-4 overflow-x-auto leading-relaxed" style={{ color: 'var(--fg)' }}>
-        <code>{content}</code>
-      </pre>
-    </div>
+    <nav aria-label="Conversations" className="flex flex-col gap-4 p-2">
+      {groupSessions(sessions).map(([label, items]) => (
+        <div key={label}>
+          <p className="px-2.5 pb-1 text-[11.5px] font-medium text-fg-3">{label}</p>
+          <ul className="flex flex-col gap-px">
+            {items.map((s) => {
+              const active = s.id === activeId;
+              return (
+                <li key={s.id} className="group relative">
+                  {editing === s.id ? (
+                    <form
+                      onSubmit={(e) => { e.preventDefault(); if (title.trim()) onRename(s.id, title.trim()); setEditing(null); }}
+                      className="px-1"
+                    >
+                      <input
+                        autoFocus
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        onBlur={() => setEditing(null)}
+                        onKeyDown={(e) => e.key === 'Escape' && setEditing(null)}
+                        aria-label="Conversation title"
+                        className="field-control !min-h-9 !py-1.5 text-[13px]"
+                      />
+                    </form>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => onSelect(s.id)}
+                        aria-current={active ? 'true' : undefined}
+                        className={`flex w-full flex-col items-start rounded-md px-2.5 py-2 pr-16 text-left transition-colors ${active ? 'bg-subtle' : 'hover:bg-subtle/70'}`}
+                      >
+                        <span className={`w-full truncate text-[13.5px] ${active ? 'font-semibold text-fg' : 'text-fg-2'}`}>{s.title || 'Untitled'}</span>
+                        <span className="mt-0.5 font-mono text-[11px] text-fg-3">{s.course_code || 'All courses'}</span>
+                      </button>
+                      <div className="absolute top-1.5 right-1 flex opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-lg:opacity-100">
+                        <IconButton icon={Pencil} label="Rename" size="sm" className="!size-7" onClick={() => { setEditing(s.id); setTitle(s.title); }} />
+                        <IconButton icon={Trash2} label="Delete conversation" size="sm" className="!size-7 hover:!text-error" onClick={() => onDelete(s)} />
+                      </div>
+                    </>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </nav>
   );
 }
 
-function parseInline(text) {
-  const tokens = [];
-  let r = text, k = 0;
-  while (r.length > 0) {
-    const cm = r.match(/^`([^`]+)`/);
-    if (cm) {
-      tokens.push(
-        <code key={k++} className="font-mono text-[13px]" style={{
-          background: 'var(--bg-subtle)',
-          border: '1px solid var(--border)',
-          padding: '0.1rem 0.35rem',
-          borderRadius: '4px',
-          color: 'var(--fg)',
-        }}>{cm[1]}</code>
-      );
-      r = r.slice(cm[0].length);
-      continue;
-    }
-    const bm = r.match(/^\*\*(.+?)\*\*/);
-    if (bm) { tokens.push(<strong key={k++} className="font-semibold" style={{ color: 'var(--fg)' }}>{bm[1]}</strong>); r = r.slice(bm[0].length); continue; }
-    const im = r.match(/^\*(.+?)\*/);
-    if (im) { tokens.push(<em key={k++} className="italic" style={{ color: 'var(--fg-2)' }}>{im[1]}</em>); r = r.slice(im[0].length); continue; }
-    const nx = r.search(/\*\*|\*|`/);
-    if (nx === -1) { tokens.push(r); r = ''; } else if (nx === 0) { tokens.push(r[0]); r = r.slice(1); } else { tokens.push(r.slice(0, nx)); r = r.slice(nx); }
-  }
-  return tokens;
-}
-
-function renderMarkdown(text) {
-  if (!text) return null;
-  const blocks = text.split('\n\n');
-  return blocks.map((block, bIdx) => {
-    const trimmed = block.trim();
-    if (!trimmed) return null;
-
-    if (trimmed.startsWith('```')) {
-      const lines = trimmed.split('\n');
-      const lang = lines[0].replace('```', '').trim();
-      const code = lines.slice(1, -1).join('\n');
-      return <CodeBlock key={bIdx} lang={lang} content={code} />;
-    }
-    if (trimmed.startsWith('## ')) {
-      return (
-        <h2 key={bIdx} className="font-sans font-semibold tracking-tight mt-8 mb-3" style={{ fontSize: '1.0625rem', color: 'var(--fg)' }}>
-          {parseInline(trimmed.slice(3))}
-        </h2>
-      );
-    }
-    if (trimmed.startsWith('### ')) {
-      return (
-        <h3 key={bIdx} className="font-sans font-semibold tracking-tight mt-6 mb-2" style={{ fontSize: '0.9375rem', color: 'var(--fg)' }}>
-          {parseInline(trimmed.slice(4))}
-        </h3>
-      );
-    }
-    if (trimmed.startsWith('> ')) {
-      return (
-        <blockquote
-          key={bIdx}
-          className="my-5 pl-4 py-3 pr-4 rounded-r-xl font-sans"
-          style={{
-            borderLeft: '2px solid var(--accent)',
-            background: 'var(--accent-dim)',
-            fontSize: '14px',
-            color: 'var(--fg-2)',
-          }}
-        >
-          {parseInline(trimmed.slice(2))}
-        </blockquote>
-      );
-    }
-
-    // numbered list items
-    const listLines = trimmed.split('\n').filter(l => l.match(/^\d+\.\s+/));
-    if (listLines.length > 1 && listLines.length === trimmed.split('\n').length) {
-      return (
-        <ol key={bIdx} className="my-4 pl-5 space-y-1.5" style={{ color: 'color-mix(in srgb, var(--fg) 88%, transparent)', fontSize: '0.9375rem' }}>
-          {listLines.map((line, i) => (
-            <li key={i}>{parseInline(line.replace(/^\d+\.\s+/, ''))}</li>
-          ))}
-        </ol>
-      );
-    }
-
-    if (trimmed.includes('|') && trimmed.includes('\n')) {
-      const lines = trimmed.split('\n').filter(l => l.trim().startsWith('|'));
-      if (lines.length >= 2) {
-        const parseRow = row => row.split('|').slice(1, -1).map(c => c.trim());
-        const headers = parseRow(lines[0]);
-        const dataRows = lines.slice(2).map(parseRow);
-        return (
-          <div key={bIdx} className="my-5 overflow-x-auto rounded-xl" style={{ border: '1px solid var(--border)' }}>
-            <table className="w-full text-left" style={{ fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
-              <thead style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
-                <tr>
-                  {headers.map((h, i) => (
-                    <th key={i} className="px-4 py-3 font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)', fontSize: '11px' }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {dataRows.map((row, i) => (
-                  <tr key={i} style={{ borderTop: '1px solid var(--border)', color: 'var(--fg)' }}>
-                    {row.map((cell, j) => <td key={j} className="px-4 py-3">{parseInline(cell)}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-      }
-    }
-
+/* ─── Scope picker ─────────────────────────────────────────────────────── */
+function ScopePicker({ courses, value, onChange, locked }) {
+  const current = courses.find((c) => c.id === value);
+  if (locked) {
     return (
-      <p key={bIdx} className="my-4 font-sans select-text leading-relaxed" style={{ fontSize: '0.9375rem', color: 'color-mix(in srgb, var(--fg) 88%, transparent)' }}>
-        {parseInline(trimmed)}
-      </p>
+      <span className="inline-flex h-8 items-center gap-2 rounded-md bg-subtle px-2.5 text-[13px] text-fg-2">
+        <span className="text-fg-3">Searching</span>
+        <span className="font-medium text-fg">{current ? current.code : 'All my courses'}</span>
+      </span>
     );
-  });
+  }
+  return (
+    <label className="relative inline-flex h-8 items-center">
+      <span className="sr-only">Search scope</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 max-w-[15rem] appearance-none truncate rounded-md border border-border bg-surface py-0 pr-8 pl-2.5 text-[13px] font-medium text-fg transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        <option value="">All my courses</option>
+        {courses.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.title}</option>)}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2.5 size-4 text-fg-3" aria-hidden />
+    </label>
+  );
 }
 
-export function AskScreen({ user }) {
+/* ─── One assistant answer ─────────────────────────────────────────────── */
+function Answer({ msg, onCite, onRetry }) {
   const toast = useToast();
-  const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [conversation, setConversation] = useState([]);
-  const [copiedIndex, setCopiedIndex] = useState(null);
-  const [activeCitation, setActiveCitation] = useState(null);
-  const bottomRef = useRef(null);
+  const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const isConversationActive = conversation.length > 0;
+  if (msg.error) {
+    return <ErrorState variant="inline" title="We couldn’t answer that" description={msg.error} onRetry={onRetry} />;
+  }
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
+  const notFound = msg.status === 'not_found';
+  const offline = msg.status === 'model_unavailable';
 
-  const handleSubmit = async (qText) => {
-    const text = qText || query;
-    if (!text.trim() || loading) return;
-
-    const userMessage = { id: Date.now(), role: 'user', content: text };
-    setConversation(prev => [...prev, userMessage]);
-    setQuery('');
-    setLoading(true);
-
+  const save = async () => {
+    setSaving(true);
     try {
-      const res = await api.post('/ai/ask/', { query: text });
-      const aiMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: res.data.answer || res.data.response || 'No registered content found for this query.',
-        citations: res.data.citations || [],
-      };
-      setConversation(prev => [...prev, aiMessage]);
-    } catch (_err) {
-      const aiMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: `I've received your query: "${text}". Connect a backend service or upload course materials to retrieve indexed citations.`,
-        citations: [],
-      };
-      setConversation(prev => [...prev, aiMessage]);
+      await chatApi.save(msg.id);
+      setSaved(true);
+      toast.success('Saved to your notebook.');
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
     } finally {
-      setLoading(false);
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      setSaving(false);
     }
-  };
-
-  const handleSaveToNotebook = (msg) => {
-    const existing = JSON.parse(localStorage.getItem('nb_answers') || '[]');
-    const newEntry = {
-      id: `ans-${Date.now()}`,
-      query: conversation.find(m => m.role === 'user')?.content || 'AI Study Note',
-      content: msg.content,
-      saved_at: new Date().toISOString(),
-      course_code: 'ENROLLED-COURSE'
-    };
-    localStorage.setItem('nb_answers', JSON.stringify([newEntry, ...existing]));
-    toast.success('Answer saved to your Study Notebook.');
   };
 
   return (
-    <div className="flex-1 flex min-h-0 relative overflow-hidden" style={{ background: 'var(--bg)' }}>
-      {/* Main Reading Column */}
-      <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden items-center">
-        {!isConversationActive ? (
-          /* Hero Landing View */
-          <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 max-w-[720px] mx-auto w-full text-center py-16">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="w-11 h-11 rounded-md flex items-center justify-center mb-8 flex-shrink-0"
-              style={{
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border)',
-                color: 'var(--accent)',
-              }}
-            >
-              <Sparkles className="w-5 h-5" />
-            </motion.div>
-
-            <motion.h1
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="hero-title mb-2"
-              style={{ fontSize: 'clamp(2rem, 5vw, 3rem)' }}
-            >
-              {getGreeting()}, {user?.username || 'Student'}.
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="font-sans mb-10 font-normal leading-relaxed"
-              style={{ fontSize: '15px', color: 'var(--fg-3)', maxWidth: '380px' }}
-            >
-              What would you like to understand today?
-            </motion.p>
-
-            {/* Prompt Input */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.14, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="w-full rounded-md p-4 flex flex-col gap-3 transition-all duration-200"
-              style={{
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border)',
-                boxShadow: 'var(--shadow-premium-lg)',
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-hover)';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border)';
-              }}
-            >
-              <textarea
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                placeholder="Ask any question across your course materials..."
-                rows={3}
-                className="w-full bg-transparent font-sans placeholder:text-[var(--fg-3)] outline-none resize-none px-2 pt-1"
-                style={{ fontSize: '15px', color: 'var(--fg)' }}
-              />
-              <div
-                className="flex items-center justify-between pt-3 px-1"
-                style={{ borderTop: '1px solid var(--border)' }}
-              >
-                <div className="flex items-center gap-2 font-sans select-none" style={{ fontSize: '11px', color: 'var(--fg-3)' }}>
-                  <span className="keycap">↵</span>
-                  <span>to ask</span>
-                </div>
-                <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => handleSubmit()}
-                  disabled={!query.trim() || loading}
-                  className="w-8 h-8 rounded-md flex items-center justify-center transition-all disabled:opacity-30 cursor-pointer"
-                  style={{ background: 'var(--fg)', color: 'var(--bg)' }}
-                >
-                  <ArrowUp className="w-4 h-4" />
-                </motion.button>
-              </div>
-            </motion.div>
-
-            {/* Suggestion Chips */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.22, duration: 0.3 }}
-              className="flex flex-wrap items-center justify-center gap-2 mt-6 max-w-xl"
-            >
-              {SUGGESTION_CHIPS.map((chip) => (
-                <motion.button
-                  key={chip.id}
-                  whileHover={{ y: -1 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => handleSubmit(chip.text)}
-                  className="font-sans cursor-pointer transition-all"
-                  style={{
-                    fontSize: '12px',
-                    padding: '0.5rem 0.875rem',
-                    borderRadius: '4px',
-                    border: '1px solid var(--border)',
-                    background: 'var(--bg-surface)',
-                    color: 'var(--fg-2)',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--border-hover)';
-                    e.currentTarget.style.color = 'var(--fg)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                    e.currentTarget.style.color = 'var(--fg-2)';
-                  }}
-                >
-                  {chip.text}
-                </motion.button>
-              ))}
-            </motion.div>
-          </div>
-        ) : (
-          /* Conversation View */
-          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-10 max-w-[720px] mx-auto w-full flex flex-col gap-10">
-            {conversation.map((msg, idx) => (
-              <div key={msg.id || idx} className="flex flex-col gap-4">
-                {msg.role === 'user' ? (
-                  /* User Question */
-                  <div
-                    className="flex items-start gap-3 pb-6"
-                    style={{ borderBottom: '1px solid var(--border)' }}
-                  >
-                    <div
-                      className="w-7 h-7 rounded-full font-semibold flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{
-                        background: 'var(--bg-surface)',
-                        border: '1px solid var(--border)',
-                        color: 'var(--fg-2)',
-                        fontSize: '12px',
-                        fontFamily: 'var(--font-mono)',
-                      }}
-                    >
-                      Q
-                    </div>
-                    <h2 className="font-sans font-medium pt-0.5 leading-snug" style={{ fontSize: '16px', color: 'var(--fg)' }}>
-                      {msg.content}
-                    </h2>
-                  </div>
-                ) : (
-                  /* AI Response */
-                  <div className="flex flex-col gap-5">
-                    {/* AI mark */}
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--accent)' }}
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="font-sans font-medium" style={{ fontSize: '12px', color: 'var(--fg-3)' }}>
-                        AuraStudy AI
-                      </span>
-                    </div>
-
-                    {/* Content */}
-                    <div style={{ color: 'var(--fg)' }}>
-                      {renderMarkdown(msg.content)}
-                    </div>
-
-                    {/* Citation Sources */}
-                    {msg.citations && msg.citations.length > 0 && (
-                      <div
-                        className="pt-5 flex flex-col gap-2.5"
-                        style={{ borderTop: '1px solid var(--border)' }}
-                      >
-                        <span
-                          className="flex items-center gap-1.5 font-sans uppercase tracking-wider"
-                          style={{ fontSize: '10px', fontWeight: 600, color: 'var(--fg-3)' }}
-                        >
-                          <BookOpen className="w-3 h-3" />
-                          Sources
-                        </span>
-                        <div className="flex flex-wrap gap-2">
-                          {msg.citations.map((c, cIdx) => (
-                            <motion.button
-                              key={cIdx}
-                              whileHover={{ y: -1 }}
-                              whileTap={{ scale: 0.98 }}
-                              onClick={() => setActiveCitation(c)}
-                              className="flex items-center gap-2 cursor-pointer transition-all font-sans"
-                              style={{
-                                fontSize: '12px',
-                                padding: '0.375rem 0.75rem',
-                                borderRadius: '4px',
-                                border: '1px solid var(--border)',
-                                background: 'var(--bg-surface)',
-                                color: 'var(--fg-2)',
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.borderColor = 'var(--accent)';
-                                e.currentTarget.style.color = 'var(--fg)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.borderColor = 'var(--border)';
-                                e.currentTarget.style.color = 'var(--fg-2)';
-                              }}
-                            >
-                              <FileText className="w-3 h-3 flex-shrink-0" style={{ color: 'var(--accent)' }} />
-                              <span>{c.document_title}</span>
-                              <span
-                                className="font-mono"
-                                style={{ fontSize: '10px', color: 'var(--fg-3)' }}
-                              >
-                                p.{c.page_number}
-                              </span>
-                            </motion.button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-4 font-sans px-1" style={{ fontSize: '12px', color: 'var(--fg-3)' }}>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(msg.content);
-                          setCopiedIndex(idx);
-                          setTimeout(() => setCopiedIndex(null), 2000);
-                        }}
-                        className="flex items-center gap-1.5 cursor-pointer transition-colors"
-                        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--fg)'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--fg-3)'}
-                      >
-                        {copiedIndex === idx
-                          ? <Check className="w-3.5 h-3.5" style={{ color: 'var(--success)' }} />
-                          : <Copy className="w-3.5 h-3.5" />
-                        }
-                        <span>{copiedIndex === idx ? 'Copied' : 'Copy'}</span>
-                      </button>
-                      <button
-                        onClick={() => handleSaveToNotebook(msg)}
-                        className="flex items-center gap-1.5 cursor-pointer transition-colors"
-                        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--fg)'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--fg-3)'}
-                      >
-                        <Bookmark className="w-3.5 h-3.5" />
-                        <span>Save to Notebook</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {/* Loading */}
-            {loading && (
-              <div className="flex items-center gap-3 py-4 font-sans" style={{ fontSize: '13px', color: 'var(--fg-3)' }}>
-                <div className="ai-thinking-line" />
-                <span>Searching course materials…</span>
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-        )}
-
-        {/* Floating Input Bar at Bottom */}
-        {isConversationActive && (
-          <div
-            className="w-full sticky bottom-0 z-10"
-            style={{ background: 'color-mix(in srgb, var(--bg) 90%, transparent)', backdropFilter: 'blur(12px)' }}
-          >
-            <div className="max-w-[720px] mx-auto w-full p-4">
-              <div
-                className="flex items-center gap-3 rounded-md px-4 py-2.5 transition-all"
-                style={{
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  boxShadow: 'var(--shadow-premium-lg)',
-                }}
-              >
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleSubmit();
-                    }
-                  }}
-                  placeholder="Ask a follow-up question…"
-                  className="flex-1 bg-transparent outline-none font-sans"
-                  style={{ fontSize: '14px', color: 'var(--fg)' }}
-                />
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => handleSubmit()}
-                  disabled={!query.trim() || loading}
-                  className="w-7 h-7 rounded-md flex items-center justify-center transition-all disabled:opacity-30 cursor-pointer flex-shrink-0"
-                  style={{ background: 'var(--fg)', color: 'var(--bg)' }}
-                >
-                  <ArrowUp className="w-3.5 h-3.5" />
-                </motion.button>
-              </div>
-            </div>
-          </div>
+    <article className="flex flex-col gap-3" aria-busy={msg.streaming || undefined}>
+      <div className="flex items-center gap-2.5">
+        <BrandMark size={22} />
+        <span className="text-[13px] font-semibold text-fg">AuraStudy</span>
+        {msg.citations?.length > 0 && !notFound && (
+          <span className="text-xs text-fg-3">· {msg.citations.length} {msg.citations.length === 1 ? 'source' : 'sources'}</span>
         )}
       </div>
 
-      {/* Citation Side Drawer */}
-      <AnimatePresence>
-        {activeCitation && (
-          <motion.div
-            initial={{ x: 360, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 360, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-            className="w-80 flex flex-col justify-between p-6 z-20 overflow-y-auto"
-            style={{
-              background: 'var(--bg-surface)',
-              borderLeft: '1px solid var(--border)',
-              boxShadow: 'var(--shadow-premium-xl)',
-            }}
-          >
-            <div className="flex flex-col gap-6">
-              {/* Header */}
-              <div
-                className="flex items-center justify-between pb-4"
-                style={{ borderBottom: '1px solid var(--border)' }}
+      <div className="sm:pl-[34px]">
+        {notFound ? (
+          <div className="flex gap-3 rounded-lg border border-border bg-subtle/60 px-4 py-3">
+            <SearchX className="mt-0.5 size-4 shrink-0 text-fg-3" aria-hidden />
+            <p className="text-[14px] leading-relaxed text-fg-2">{msg.content}</p>
+          </div>
+        ) : msg.streaming && !msg.content ? (
+          <div className="flex items-center gap-2.5 py-1 text-[13px] text-fg-3" role="status">
+            <span className="ai-thinking-line !w-12" />
+            {msg.citations?.length ? `Reading ${msg.citations.length} passages from your materials…` : 'Searching your course materials…'}
+          </div>
+        ) : (
+          <>
+            {offline && (
+              <div className="mb-3 flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning-dim px-3.5 py-2.5 text-[13px] text-fg-2">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+                The AI model is offline — showing matching passages instead of a written answer.
+              </div>
+            )}
+            <Markdown onCite={(n) => onCite(msg.citations?.[n - 1])}>{offline ? msg.content.split('\n').slice(1).join('\n') : msg.content}</Markdown>
+            {msg.streaming && <span className="ai-cursor" aria-hidden />}
+          </>
+        )}
+
+        {!notFound && msg.citations?.length > 0 && !msg.streaming && (
+          <div className="mt-4">
+            <p className="mb-2 text-xs font-medium text-fg-3">Sources</p>
+            <ol className="flex flex-wrap gap-2">
+              {msg.citations.map((c, i) => (
+                <li key={c.chunk_id || i} className="max-w-full">
+                  <button
+                    onClick={() => onCite(c)}
+                    className="group inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-surface py-1.5 pr-2.5 pl-1.5 text-left text-[12.5px] transition-colors hover:border-border-strong"
+                  >
+                    <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm bg-accent-dim font-mono text-[11px] font-semibold text-accent">{c.index || i + 1}</span>
+                    <span className="truncate font-medium text-fg-2 group-hover:text-fg">{c.document_title}</span>
+                    <span className="shrink-0 font-mono text-[11px] text-fg-3">{c.course_code} · p.{c.page_number}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {!msg.streaming && !notFound && (
+          <div className="-ml-2.5 mt-3 flex flex-wrap items-center gap-0.5">
+            <button
+              onClick={async () => { if (await copyText(msg.content)) { setCopied(true); setTimeout(() => setCopied(false), 1600); } }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-medium text-fg-3 transition-colors hover:bg-subtle hover:text-fg"
+            >
+              {copied ? <Check className="size-3.5 text-success" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+            {msg.status === 'answered' && msg.id && (
+              <button
+                onClick={save}
+                disabled={saved || saving}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-medium transition-colors hover:bg-subtle hover:text-fg ${saved ? 'text-fg' : 'text-fg-3'}`}
               >
-                <div className="flex items-center gap-2 font-sans font-medium" style={{ fontSize: '13px', color: 'var(--fg)' }}>
-                  <BookOpen className="w-4 h-4" style={{ color: 'var(--accent)' }} />
-                  <span>Source</span>
+                {saved ? <BookmarkCheck className="size-3.5" aria-hidden /> : <Bookmark className="size-3.5" aria-hidden />}
+                {saved ? 'Saved' : 'Save to notebook'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/* ─── Screen ───────────────────────────────────────────────────────────── */
+export function AskScreen({ user, onNavigate }) {
+  const toast = useToast();
+  const route = useRoute();
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const sessionParam = route.params.session || null;
+
+  const [scopeCourses, setScopeCourses] = useState([]);
+  const [scope, setScope] = useState('');
+  const [health, setHealth] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [sessionsState, setSessionsState] = useState('loading');
+  const [session, setSession] = useState(null); // {id, title, course, course_code}
+  const [messages, setMessages] = useState([]);
+  const [loadingSession, setLoadingSession] = useState(false);
+  const [query, setQuery] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [citation, setCitation] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [toDelete, setToDelete] = useState(null);
+  const scrollRef = useRef(null);
+  const composerRef = useRef(null);
+  const abortRef = useRef(null);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      setSessions(await chatApi.sessions());
+      setSessionsState('ready');
+    } catch {
+      setSessionsState('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    api.get('/ai/scope/').then((r) => setScopeCourses(r.data)).catch(() => setScopeCourses([]));
+    api.get('/ai/health/').then((r) => setHealth(r.data)).catch(() => setHealth(null));
+    refreshSessions();
+  }, [refreshSessions]);
+
+  // Open the conversation named in the URL (also on refresh / back-forward).
+  useEffect(() => {
+    if (!sessionParam) {
+      if (!busy) { setSession(null); setMessages([]); }
+      return;
+    }
+    if (session?.id === sessionParam || busy) return;
+    let cancelled = false;
+    setLoadingSession(true);
+    chatApi.session(sessionParam)
+      .then((data) => {
+        if (cancelled) return;
+        setSession({ id: data.id, title: data.title, course: data.course, course_code: data.course_code });
+        setScope(data.course || '');
+        setMessages(data.messages.map((m) => ({ ...m })));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        toast.error('That conversation is no longer available.');
+        replaceParams({});
+      })
+      .finally(() => !cancelled && setLoadingSession(false));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionParam]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: busy ? 'auto' : 'smooth' });
+  }, [messages, busy]);
+
+  const newChat = () => {
+    abortRef.current?.abort();
+    setSession(null);
+    setMessages([]);
+    setQuery('');
+    setHistoryOpen(false);
+    replaceParams({});
+    setTimeout(() => composerRef.current?.focus(), 50);
+  };
+
+  const ask = async (text) => {
+    const q = (text ?? query).trim();
+    if (!q || busy) return;
+    setQuery('');
+    setBusy(true);
+    const tempId = `pending-${Date.now()}`;
+    setMessages((m) => [...m, { id: `u-${tempId}`, role: 'user', content: q }, { id: tempId, role: 'assistant', content: '', streaming: true, citations: [] }]);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const patch = (fn) => setMessages((m) => m.map((x) => (x.id === tempId ? { ...x, ...fn(x) } : x)));
+
+    try {
+      const final = await streamChat(
+        { question: q, courseId: session ? null : scope || null, sessionId: session?.id, signal: controller.signal },
+        {
+          onMeta: (meta) => {
+            patch(() => ({ citations: meta.citations }));
+            if (!session) {
+              setSession({ id: meta.session_id, title: meta.session_title, course: scope || null, course_code: scopeCourses.find((c) => c.id === scope)?.code });
+              replaceParams({ session: meta.session_id });
+            }
+          },
+          onToken: (t) => patch((x) => ({ content: x.content + t })),
+        },
+      );
+      setMessages((m) => m.map((x) => (x.id === tempId
+        ? { id: final.message_id, role: 'assistant', content: final.answer, status: final.status, citations: final.citations }
+        : x)));
+      refreshSessions();
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        patch((x) => ({ streaming: false, status: 'answered', content: x.content || '_Stopped._' }));
+      } else {
+        patch(() => ({ streaming: false, error: err.message, question: q }));
+      }
+    } finally {
+      setBusy(false);
+      abortRef.current = null;
+      composerRef.current?.focus({ preventScroll: true });
+    }
+  };
+
+  const retry = (msg) => {
+    setMessages((m) => {
+      const i = m.findIndex((x) => x.id === msg.id);
+      return i < 0 ? m : m.slice(0, Math.max(0, i - 1));
+    });
+    ask(msg.question);
+  };
+
+  const rename = async (id, title) => {
+    try {
+      await chatApi.rename(id, title);
+      setSessions((list) => list.map((s) => (s.id === id ? { ...s, title } : s)));
+      if (session?.id === id) setSession((s) => ({ ...s, title }));
+    } catch (err) { toast.error(extractErrorMessage(err)); }
+  };
+
+  const remove = async () => {
+    const s = toDelete;
+    setToDelete(null);
+    try {
+      await chatApi.remove(s.id);
+      setSessions((list) => list.filter((x) => x.id !== s.id));
+      if (session?.id === s.id) newChat();
+      toast.success('Conversation deleted.');
+    } catch (err) { toast.error(extractErrorMessage(err)); }
+  };
+
+  const selectSession = (id) => {
+    setHistoryOpen(false);
+    if (id !== session?.id) { abortRef.current?.abort(); replaceParams({ session: id }); }
+  };
+
+  const suggestions = useMemo(() => {
+    const pool = scope ? scopeCourses.filter((c) => c.id === scope) : scopeCourses;
+    const list = pool.map((c) => SUGGESTIONS[c.code]).filter(Boolean);
+    return list.slice(0, 3);
+  }, [scopeCourses, scope]);
+
+  const active = messages.length > 0 || loadingSession;
+  const llmDown = health && !health.ready;
+  const firstName = (user?.username || '').split(/\s+/)[0] || 'there';
+  const noCourses = scopeCourses.length === 0;
+
+  const historyList = (
+    <ConversationList
+      sessions={sessions}
+      state={sessionsState}
+      activeId={session?.id}
+      onSelect={selectSession}
+      onRename={rename}
+      onDelete={setToDelete}
+    />
+  );
+
+  const composer = (
+    <Composer
+      ref={composerRef}
+      value={query}
+      onChange={setQuery}
+      onSubmit={() => ask()}
+      loading={busy}
+      size={active ? 'md' : 'lg'}
+      minRows={active ? 1 : 2}
+      autoFocus={!active}
+      placeholder={active ? 'Ask a follow-up…' : 'Ask anything about your course materials…'}
+      label="Ask a question"
+      footer={active ? null : (
+        <>
+          <span className="hidden sm:inline"><kbd className="keycap">Enter</kbd> to send · <kbd className="keycap">Shift</kbd> + <kbd className="keycap">Enter</kbd> for a new line</span>
+          <span>Answers cite your materials</span>
+        </>
+      )}
+    />
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1">
+      {isDesktop && (
+        <aside className="flex w-[272px] shrink-0 flex-col border-r border-border bg-canvas" aria-label="Conversation history">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2.5">
+            <span className="px-1 text-[13px] font-semibold text-fg">Conversations</span>
+            <Button size="sm" variant="secondary" iconLeft={MessageSquarePlus} onClick={newChat}>New chat</Button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">{historyList}</div>
+        </aside>
+      )}
+
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* Toolbar */}
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 sm:px-4">
+          {!isDesktop && <IconButton icon={History} label="Conversation history" size="sm" onClick={() => setHistoryOpen(true)} />}
+          <ScopePicker courses={scopeCourses} value={scope} onChange={setScope} locked={!!session} />
+          {session && <span className="hidden min-w-0 truncate text-[13px] text-fg-3 md:inline">{session.title}</span>}
+          <div className="ml-auto flex items-center gap-1">
+            {active && <Button size="sm" variant="ghost" iconLeft={MessageSquarePlus} onClick={newChat} className="lg:hidden">New</Button>}
+          </div>
+        </div>
+
+        {llmDown && (
+          <div role="status" className="flex shrink-0 items-start gap-2.5 border-b border-warning/25 bg-warning-dim px-4 py-2.5 text-[13px] text-fg-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+            <span>
+              <strong className="font-semibold text-fg">The AI model is offline.</strong>{' '}
+              You can still search your materials — answers will show matching passages until it’s back.
+            </span>
+          </div>
+        )}
+
+        {!active ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 sm:px-6">
+            <div className="my-auto flex w-full max-w-[680px] flex-col py-10 sm:py-14">
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }} className="mb-8 text-center">
+                <h1 className="hero-title text-[2.25rem] sm:text-[3rem]">{greeting()}, {firstName}.</h1>
+                <p className="mx-auto mt-3 max-w-[48ch] text-[15px] leading-relaxed text-fg-3">
+                  {user?.role === 'student'
+                    ? 'Ask about anything in your enrolled courses. Every answer points back to the page it came from.'
+                    : user?.role === 'teacher'
+                      ? 'Check how the assistant answers from your course materials — the same way your students see it.'
+                      : 'Query the full course library to verify answers and sources across every course.'}
+                </p>
+              </motion.div>
+
+              {noCourses && user?.role === 'student' ? (
+                <div className="rounded-lg border border-dashed border-border-strong p-6 text-center">
+                  <p className="text-[14px] text-fg-2">You aren’t enrolled in any courses yet, so there’s nothing for the assistant to search.</p>
+                  <Button className="mt-4" onClick={() => onNavigate?.('courses')}>Browse courses</Button>
                 </div>
-                <button
-                  onClick={() => setActiveCitation(null)}
-                  className="p-1.5 rounded-lg cursor-pointer transition-colors"
-                  style={{ color: 'var(--fg-3)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--fg)'; e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--fg-3)'; e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+              ) : (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
+                  {composer}
+                </motion.div>
+              )}
 
-              {/* Document info */}
-              <div className="flex flex-col gap-2">
-                <span className="font-sans font-semibold" style={{ fontSize: '14px', color: 'var(--fg)' }}>
-                  {activeCitation.document_title}
-                </span>
-                <span
-                  className="keycap w-fit"
-                  style={{ color: 'var(--accent)', background: 'var(--accent-dim)', borderColor: 'var(--accent)' }}
-                >
-                  Page {activeCitation.page_number}
-                </span>
+              {suggestions.length > 0 && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.14, duration: 0.3 }} className="mt-8">
+                  <p className="mb-2 px-1 text-xs font-medium text-fg-3">Try asking</p>
+                  <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface/60">
+                    {suggestions.map((s) => (
+                      <li key={s}>
+                        <button onClick={() => ask(s)} className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left text-[14px] text-fg-2 transition-colors hover:bg-subtle hover:text-fg">
+                          <span>{s}</span>
+                          <ArrowUpRight className="size-4 shrink-0 text-fg-3 transition-transform group-hover:-translate-y-px group-hover:translate-x-px group-hover:text-fg" aria-hidden />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-6" aria-live="polite">
+              <div className="mx-auto flex w-full max-w-[740px] flex-col gap-8 pt-8 pb-10">
+                {loadingSession ? (
+                  <div className="flex flex-col gap-4"><Skeleton className="ml-auto h-10 w-2/3" /><Skeleton className="h-4 w-1/3" /><Skeleton className="h-24" /></div>
+                ) : (
+                  messages.map((m) => (m.role === 'user' ? (
+                    <div key={m.id} className="flex justify-end">
+                      <p className="max-w-[85%] rounded-xl rounded-br-sm bg-subtle px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-fg">{m.content}</p>
+                    </div>
+                  ) : (
+                    <Answer key={m.id} msg={m} onCite={(c) => c && setCitation(c)} onRetry={busy ? undefined : () => retry(m)} />
+                  )))
+                )}
               </div>
-
-              {/* Excerpt */}
-              <div
-                className="p-4 rounded-xl font-sans leading-relaxed italic"
-                style={{
-                  background: 'var(--bg-subtle)',
-                  border: '1px solid var(--border)',
-                  fontSize: '13px',
-                  color: 'var(--fg-2)',
-                }}
-              >
-                "{activeCitation.excerpt}"
-              </div>
-
-              {/* Relevance score */}
-              <div className="flex flex-col gap-2" style={{ fontSize: '11px', color: 'var(--fg-3)' }}>
-                <div className="flex items-center justify-between font-sans">
-                  <span>Relevance score</span>
-                  <span className="font-mono" style={{ color: 'var(--fg-2)' }}>
-                    {Math.round((activeCitation.relevance_score || 0.9) * 100)}%
-                  </span>
-                </div>
-                <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-hover)' }}>
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${(activeCitation.relevance_score || 0.9) * 100}%`, background: 'var(--accent)' }}
-                  />
+            </div>
+            <div className="relative shrink-0 px-4 pb-4 sm:px-6 sm:pb-5">
+              <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-canvas to-transparent" />
+              <div className="mx-auto w-full max-w-[740px]">
+                {composer}
+                <div className="mt-2 flex items-center justify-between gap-3 px-1 text-xs text-fg-3">
+                  <span className="truncate">Answers come only from course materials and can still be wrong — check the sources.</span>
+                  {busy && (
+                    <button onClick={() => abortRef.current?.abort()} className="inline-flex shrink-0 items-center gap-1 rounded-sm font-medium transition-colors hover:text-fg">
+                      <X className="size-3.5" aria-hidden /> Stop
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
-
-            {/* CTA */}
-            <button
-              onClick={() => setActiveCitation(null)}
-              className="w-full py-2.5 rounded-lg font-sans font-medium cursor-pointer transition-all flex items-center justify-center gap-2 mt-6"
-              style={{
-                background: 'var(--bg-subtle)',
-                border: '1px solid var(--border)',
-                color: 'var(--fg-2)',
-                fontSize: '13px',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--bg-hover)';
-                e.currentTarget.style.color = 'var(--fg)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--bg-subtle)';
-                e.currentTarget.style.color = 'var(--fg-2)';
-              }}
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>Open Document Viewer</span>
-            </button>
-          </motion.div>
+          </>
         )}
-      </AnimatePresence>
+      </div>
+
+      {!isDesktop && (
+        <Sheet isOpen={historyOpen} onClose={() => setHistoryOpen(false)} title="Conversations" side="left">
+          <div className="border-b border-border p-3">
+            <Button fullWidth iconLeft={MessageSquarePlus} onClick={newChat}>New chat</Button>
+          </div>
+          {historyList}
+        </Sheet>
+      )}
+
+      <Sheet isOpen={!!citation} onClose={() => setCitation(null)} title="Source" label="Source details">
+        {citation && (
+          <div className="flex flex-col gap-5 p-5">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-accent-dim text-accent">
+                <FileText className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold leading-snug text-fg">{citation.document_title}</p>
+                <p className="mt-1 text-[12.5px] text-fg-3">{[citation.course_code, citation.unit, citation.topic].filter(Boolean).join(' · ')}</p>
+                <div className="mt-2 flex gap-1.5"><Badge tone="accent">Page {citation.page_number}</Badge><Badge>Source {citation.index}</Badge></div>
+              </div>
+            </div>
+            <figure>
+              <figcaption className="mb-2 text-xs font-medium text-fg-3">Passage used in the answer</figcaption>
+              <blockquote className="rounded-md border-l-2 border-accent bg-subtle px-4 py-3 text-[14px] leading-relaxed whitespace-pre-line text-fg-2">{citation.excerpt}</blockquote>
+            </figure>
+            {typeof citation.score === 'number' && (
+              <div>
+                <div className="mb-1.5 flex items-center justify-between text-xs text-fg-3">
+                  <span className="inline-flex items-center gap-1">Match strength <Info className="size-3" aria-hidden /></span>
+                  <span className="font-mono tabular text-fg-2">{Math.round(citation.score * 100)}%</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-subtle">
+                  <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(4, Math.min(100, citation.score * 100))}%` }} />
+                </div>
+              </div>
+            )}
+            {user?.role === 'student' && (
+              <Button iconRight={ExternalLink} variant="secondary" onClick={() => { setCitation(null); onNavigate?.('documents', { doc: citation.document_id, page: citation.page_number }); }}>
+                Open in Sources at page {citation.page_number}
+              </Button>
+            )}
+          </div>
+        )}
+      </Sheet>
+
+      <Modal
+        isOpen={!!toDelete}
+        onClose={() => setToDelete(null)}
+        title="Delete this conversation?"
+        description={toDelete ? `“${toDelete.title}” will be removed from your history.` : ''}
+        size="sm"
+        footer={<><Button variant="ghost" onClick={() => setToDelete(null)}>Cancel</Button><Button variant="danger" iconLeft={Trash2} onClick={remove}>Delete</Button></>}
+      />
     </div>
   );
 }

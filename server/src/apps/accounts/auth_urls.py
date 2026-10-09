@@ -4,24 +4,30 @@ SmartStudent AI — Authentication URL Patterns
 Base path: /api/v1/auth/
 
 Endpoints:
-    POST   register/           → RegisterView
-    POST   login/              → LoginView
-    POST   logout/             → LogoutView
-    POST   token/refresh/      → SmartStudentTokenRefreshView
-    GET    me/                 → MeView (profile read)
-    PATCH  me/                 → MeView (profile update)
-    POST   password/change/    → PasswordChangeView
+    POST   register/                → RegisterView
+    POST   login/                   → LoginView
+    POST   logout/                  → LogoutView
+    POST   token/refresh/           → SmartStudentTokenRefreshView
+    GET    me/                      → MeView (profile read)
+    PATCH  me/                      → MeView (profile update)
+    POST   password/change/         → PasswordChangeView
+    POST   password/forgot/         → ForgotPasswordView
+    POST   password/verify-otp/     → VerifyResetOtpView
+    POST   password/reset-confirm/  → ResetPasswordConfirmView
 """
 
 from django.urls import path
 
 from apps.accounts.auth_views import (
+    ForgotPasswordView,
     LoginView,
     LogoutView,
     MeView,
     PasswordChangeView,
     RegisterView,
+    ResetPasswordConfirmView,
     SmartStudentTokenRefreshView,
+    VerifyResetOtpView,
 )
 
 app_name = "auth"
@@ -38,4 +44,9 @@ urlpatterns = [
     # Current user
     path("me/", MeView.as_view(), name="me"),
     path("password/change/", PasswordChangeView.as_view(), name="password-change"),
+
+    # Password reset (forgot password)
+    path("password/forgot/", ForgotPasswordView.as_view(), name="password-forgot"),
+    path("password/verify-otp/", VerifyResetOtpView.as_view(), name="password-verify-otp"),
+    path("password/reset-confirm/", ResetPasswordConfirmView.as_view(), name="password-reset-confirm"),
 ]

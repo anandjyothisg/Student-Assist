@@ -36,7 +36,7 @@ def generate_embeddings(texts: list[str]) -> list[list[float]]:
         return []
     
     model = get_embedding_model()
-    embeddings = model.encode(texts, show_progress_bar=False)
+    embeddings = model.encode(texts, show_progress_bar=False, normalize_embeddings=True, batch_size=32)
     
     # Convert numpy output to standard Python float lists
     if hasattr(embeddings, "tolist"):
@@ -55,7 +55,10 @@ def generate_query_embedding(query: str) -> list[float]:
         list of float
     """
     model = get_embedding_model()
-    embedding = model.encode(query, show_progress_bar=False)
+    # BGE models retrieve best when the query carries this instruction prefix.
+    if "bge" in settings.EMBEDDING_MODEL_NAME.lower():
+        query = f"Represent this sentence for searching relevant passages: {query}"
+    embedding = model.encode(query, show_progress_bar=False, normalize_embeddings=True)
     
     if hasattr(embedding, "tolist"):
         return embedding.tolist()

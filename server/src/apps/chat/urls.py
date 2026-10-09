@@ -1,13 +1,19 @@
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import SimpleRouter
-from .views import ChatAskView, ChatSessionViewSet
+
+from .views import ChatAskStreamView, ChatAskView, ChatSessionViewSet, SavedAnswerViewSet
 
 app_name = "chat"
 
-router = SimpleRouter()
-router.register(r"", ChatSessionViewSet, basename="session")
+saved_router = SimpleRouter()
+saved_router.register(r"saved", SavedAnswerViewSet, basename="saved")
+
+session_router = SimpleRouter()
+session_router.register(r"", ChatSessionViewSet, basename="session")
 
 urlpatterns = [
     path("ask/", ChatAskView.as_view(), name="ask"),
-    path("", include(router.urls)),
+    path("ask/stream/", ChatAskStreamView.as_view(), name="ask-stream"),
+    path("", include(saved_router.urls)),
+    path("", include(session_router.urls)),
 ]

@@ -1,0 +1,80 @@
+{
+  "code": "AI-301",
+  "title": "Artificial Intelligence",
+  "subject": "ai-ds",
+  "teacher": "daniel.reyes",
+  "description": "A foundational course on the design of intelligent agents, covering the history of AI, search and game playing, logical knowledge representation and probabilistic reasoning under uncertainty.",
+  "units": [
+    {
+      "slug": "01-foundations-and-agents",
+      "title": "Unit 1 · Foundations & Intelligent Agents",
+      "description": "What AI is, how the field developed, and the rational-agent framework used throughout the course.",
+      "topics": [
+        {
+          "slug": "01-what-is-ai",
+          "title": "What is AI? History and Approaches",
+          "description": "The four approaches to defining AI, the Turing test, rationality, and a timeline of the field from 1943 to the deep learning era.",
+          "documents": [
+            {"file": "what-is-ai-lecture-notes.md", "title": "What is AI? History and Approaches — Lecture Notes", "description": "Definitions of AI along the human/rational and thinking/acting axes, the Turing test, and key milestones including Dartmouth 1956 and the AI winters.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        },
+        {
+          "slug": "02-intelligent-agents",
+          "title": "Intelligent Agents and Environments",
+          "description": "Agents, agent functions, PEAS task descriptions, properties of task environments and the five agent architectures.",
+          "documents": [
+            {"file": "intelligent-agents-lecture-notes.md", "title": "Intelligent Agents and Environments — Lecture Notes", "description": "PEAS descriptions, the seven environment dimensions with classified examples, and reflex, model-based, goal-based, utility-based and learning agents.", "format": "docx", "category": "Lecture notes"}
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "02-search-and-problem-solving",
+      "title": "Unit 2 · Search & Problem Solving",
+      "description": "Formulating problems as state-space search, blind and heuristic search strategies, and search in two-player games.",
+      "topics": [
+        {
+          "slug": "01-uninformed-search",
+          "title": "Uninformed Search",
+          "description": "Problem formulation and the blind search strategies BFS, uniform-cost, DFS, depth-limited and iterative deepening search.",
+          "documents": [
+            {"file": "uninformed-search-lecture-notes.md", "title": "Uninformed Search Strategies — Lecture Notes", "description": "Completeness, optimality, time and space complexity of uninformed search strategies in b, d, m notation.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        },
+        {
+          "slug": "02-informed-and-adversarial-search",
+          "title": "Informed Search and Heuristics",
+          "description": "Heuristic search with greedy best-first and A*, properties of heuristics, and adversarial search in games.",
+          "documents": [
+            {"file": "informed-search-and-heuristics.md", "title": "Informed Search and Heuristics — Lecture Notes", "description": "Greedy best-first search, A*, admissible and consistent heuristics, A* optimality proof and 8-puzzle heuristics.", "format": "pdf", "category": "Lecture notes"},
+            {"file": "adversarial-search-minimax-alpha-beta.md", "title": "Adversarial Search: Minimax and Alpha-Beta Pruning", "description": "Game formulation, a fully worked minimax and alpha-beta example, move ordering and the O(b^(m/2)) best case.", "format": "pdf", "category": "Worked examples"}
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "03-knowledge-reasoning-uncertainty",
+      "title": "Unit 3 · Knowledge, Reasoning & Uncertainty",
+      "description": "Representing knowledge in propositional and first-order logic, logical inference, and reasoning with probabilities and Bayesian networks.",
+      "topics": [
+        {
+          "slug": "01-propositional-and-first-order-logic",
+          "title": "Propositional and First-Order Logic",
+          "description": "Syntax and semantics of propositional and first-order logic, entailment, inference rules, resolution and chaining.",
+          "documents": [
+            {"file": "logic-lecture-notes.md", "title": "Propositional and First-Order Logic — Lecture Notes", "description": "Syntax, semantics, entailment, validity and satisfiability, inference rules and quantifiers in first-order logic.", "format": "docx", "category": "Lecture notes"},
+            {"file": "resolution-and-chaining-worked-examples.md", "title": "Resolution, CNF and Chaining — Worked Examples", "description": "Step-by-step CNF conversion, resolution refutation proofs, and forward and backward chaining on Horn clauses.", "format": "txt", "category": "Worked examples"}
+          ]
+        },
+        {
+          "slug": "02-probabilistic-reasoning",
+          "title": "Probabilistic Reasoning and Bayesian Networks",
+          "description": "Bayes' rule, conditional independence, Bayesian networks, exact inference by enumeration and the Naive Bayes model.",
+          "documents": [
+            {"file": "bayesian-networks-lecture-notes.md", "title": "Probabilistic Reasoning and Bayesian Networks — Lecture Notes", "description": "A medical-test Bayes' rule example, the burglary alarm network, inference by enumeration and Naive Bayes classification.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -55,7 +55,6 @@ class DocumentVersionHistorySerializer(serializers.ModelSerializer):
             "title",
             "version",
             "is_latest",
-            "file",
             "file_type",
             "file_size_mb",
             "uploaded_by_name",
@@ -68,10 +67,19 @@ class DocumentVersionHistorySerializer(serializers.ModelSerializer):
         return obj.uploaded_by.get_full_name() if obj.uploaded_by else None
 
 
-class DocumentListSerializer(serializers.ModelSerializer):
-    """Compact serializer for document list views."""
+class TopicPlacementMixin(serializers.Serializer):
+    """Read-only course/unit/topic placement shared by list and detail views."""
 
     course_code = serializers.CharField(source="course.code", read_only=True)
+    course_title = serializers.CharField(source="course.title", read_only=True)
+    topic_title = serializers.CharField(source="topic.title", read_only=True, default=None)
+    unit_id = serializers.UUIDField(source="topic.unit_id", read_only=True, default=None)
+    unit_title = serializers.CharField(source="topic.unit.title", read_only=True, default=None)
+
+
+class DocumentListSerializer(TopicPlacementMixin, serializers.ModelSerializer):
+    """Compact serializer for document list views."""
+
     uploaded_by_name = serializers.SerializerMethodField()
     file_size_mb = serializers.FloatField(read_only=True)
 
@@ -80,6 +88,15 @@ class DocumentListSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "title",
+            "description",
+            "category",
+            "course",
+            "course_title",
+            "topic",
+            "topic_title",
+            "unit_id",
+            "unit_title",
+            "error_message",
             "file_type",
             "file_size_mb",
             "course_code",
@@ -98,10 +115,9 @@ class DocumentListSerializer(serializers.ModelSerializer):
         return obj.uploaded_by.get_full_name() if obj.uploaded_by else None
 
 
-class DocumentDetailSerializer(serializers.ModelSerializer):
-    """Full document detail with nested objects and history."""
+class DocumentDetailSerializer(TopicPlacementMixin, serializers.ModelSerializer):
+    """Full document detail. The file itself is only served via the download endpoint."""
 
-    course = CourseListSerializer(read_only=True)
     uploaded_by = UserPublicSerializer(read_only=True)
     processing_job = ProcessingJobSerializer(read_only=True)
     file_size_mb = serializers.FloatField(read_only=True)
@@ -113,12 +129,18 @@ class DocumentDetailSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "description",
-            "file",
+            "category",
             "file_type",
             "file_size",
             "file_size_mb",
             "file_hash",
             "course",
+            "course_code",
+            "course_title",
+            "topic",
+            "topic_title",
+            "unit_id",
+            "unit_title",
             "uploaded_by",
             "processing_status",
             "page_count",
@@ -175,7 +197,7 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ("title", "description", "file", "course", "parent", "metadata")
+        fields = ("title", "description", "category", "file", "course", "topic", "parent", "metadata")
 
     def validate_file(self, file):
         from apps.core.utils import get_file_extension, validate_file_size
@@ -202,6 +224,9 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
     def validate(self, attrs: dict) -> dict:
         parent = attrs.get("parent")
         course = attrs.get("course")
+        topic = attrs.get("topic")
+        if topic and topic.unit.course_id != course.id:
+            raise serializers.ValidationError({"topic": "This topic belongs to a different course."})
 
         if parent:
             if parent.course != course:

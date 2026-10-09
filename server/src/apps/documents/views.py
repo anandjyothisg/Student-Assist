@@ -58,7 +58,7 @@ class DocumentViewSet(ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = Document.objects.select_related(
-            "course", "course__subject", "uploaded_by", "processing_job"
+            "course", "course__subject", "uploaded_by", "processing_job", "topic", "topic__unit"
         )
 
         # Filtering based on role permissions
@@ -81,6 +81,14 @@ class DocumentViewSet(ModelViewSet):
         course_id = self.request.query_params.get("course")
         if course_id:
             qs = qs.filter(course_id=course_id)
+
+        topic_id = self.request.query_params.get("topic")
+        if topic_id:
+            qs = qs.filter(topic_id=topic_id)
+
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(models.Q(title__icontains=search) | models.Q(description__icontains=search))
 
         # Filter by processing status
         proc_status = self.request.query_params.get("status")
@@ -113,10 +121,15 @@ class DocumentViewSet(ModelViewSet):
             f"Document «{document.title}» uploaded by {self.request.user.email} "
             f"for course {document.course.code}"
         )
-        # Dispatch the Celery processing task
-        from apps.documents.tasks import process_document
-        task = process_document.delay(str(document.id))
-        logger.info(f"Processing task dispatched: task_id={task.id}")
+        # Dispatch the Celery processing task. The document itself is already
+        # saved at this point — a broker outage (e.g. Redis unreachable)
+        # must not crash the upload response; the document simply stays in
+        # its default PENDING status until reprocessed once the broker is
+        # back (see the `reprocess` action below).
+        from apps.documents.services.dispatch import dispatch_processing
+
+        mode = dispatch_processing(document.id)
+        logger.info(f"Processing for document {document.id} started via {mode}")
 
     def destroy(self, request: Request, *args, **kwargs) -> Response:
         document = self.get_object()
@@ -193,12 +206,11 @@ class DocumentViewSet(ModelViewSet):
         document.error_message = ""
         document.save(update_fields=["processing_status", "error_message", "updated_at"])
 
-        from apps.documents.tasks import process_document
-        task = process_document.delay(str(document.id))
-        logger.info(f"Reprocessing task dispatched for {document.id}: task_id={task.id}")
+        from apps.documents.services.dispatch import dispatch_processing
 
+        mode = dispatch_processing(document.id)
         return Response(
-            {"detail": "Reprocessing started.", "task_id": task.id},
+            {"detail": "Reprocessing started.", "mode": mode},
             status=status.HTTP_202_ACCEPTED,
         )
 
@@ -212,12 +224,42 @@ class DocumentViewSet(ModelViewSet):
         """GET /api/v1/documents/{id}/chunks/ — inspect extracted chunks."""
         document = self.get_object()
         qs = DocumentChunk.objects.filter(document=document).order_by("chunk_index")
+        if request.query_params.get("all") == "true":
+            # The reader needs the whole document; cap defensively.
+            return Response(DocumentChunkSerializer(qs[:5000], many=True).data)
         page = self.paginate_queryset(qs)
         if page is not None:
             serializer = DocumentChunkSerializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         serializer = DocumentChunkSerializer(qs, many=True)
         return Response(serializer.data)
+
+    @action(
+        detail=True,
+        methods=["get"],
+        permission_classes=[IsAuthenticated, IsDocumentAccessAllowed],
+        url_path="download",
+    )
+    def download(self, request: Request, pk=None):
+        """GET /api/v1/documents/{id}/download/ — the original file, permission-checked."""
+        import mimetypes
+        import os
+
+        from django.http import FileResponse, Http404
+
+        document = self.get_object()
+        if not document.file or not os.path.exists(document.file.path):
+            raise Http404("The original file is missing from storage.")
+        ext = os.path.splitext(document.file.name)[1]
+        safe_title = "".join(ch for ch in document.title if ch.isalnum() or ch in " -_.").strip() or "document"
+        content_type = mimetypes.guess_type(document.file.name)[0] or "application/octet-stream"
+        inline = request.query_params.get("inline") == "true" and content_type == "application/pdf"
+        return FileResponse(
+            open(document.file.path, "rb"),
+            as_attachment=not inline,
+            filename=f"{safe_title}{ext}",
+            content_type=content_type,
+        )
 
     @action(
         detail=True,

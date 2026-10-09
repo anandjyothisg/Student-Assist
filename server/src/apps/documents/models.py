@@ -80,6 +80,15 @@ class Document(BaseModel):
         related_name="documents",
         verbose_name=_("course"),
     )
+    topic = models.ForeignKey(
+        "academic.Topic",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documents",
+        verbose_name=_("topic"),
+    )
+    category = models.CharField(_("category"), max_length=60, blank=True)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

@@ -1,0 +1,80 @@
+{
+  "code": "CS-308",
+  "title": "Computer Networks",
+  "subject": "core-cs",
+  "teacher": "elena.fischer",
+  "description": "A layer-by-layer study of how computer networks operate, from physical transmission and link-layer protocols through IP routing to TCP, UDP and the application protocols of the Internet. Emphasis is on quantitative analysis: delay, capacity, subnetting and protocol behaviour.",
+  "units": [
+    {
+      "slug": "01-foundations",
+      "title": "Unit 1 · Network Foundations",
+      "description": "Reference models, encapsulation, performance metrics and the physical layer.",
+      "topics": [
+        {
+          "slug": "01-layered-models",
+          "title": "Layered Models: OSI and TCP/IP",
+          "description": "The seven OSI layers, the TCP/IP model, PDUs and encapsulation.",
+          "documents": [
+            {"file": "osi-and-tcpip-notes.md", "title": "OSI and TCP/IP Models — Lecture Notes", "description": "Layer functions, PDU names, OSI-to-TCP/IP mapping and a worked encapsulation-overhead example.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        },
+        {
+          "slug": "02-performance-physical-layer",
+          "title": "Performance and the Physical Layer",
+          "description": "Bandwidth, throughput, the four delay components, bandwidth-delay product, channel capacity and transmission media.",
+          "documents": [
+            {"file": "performance-and-physical-layer-notes.md", "title": "Network Performance and the Physical Layer — Lecture Notes", "description": "Delay formulas with a worked example, bandwidth-delay product, Nyquist and Shannon capacity, and guided versus unguided media.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "02-data-link-network",
+      "title": "Unit 2 · Data Link and Network Layers",
+      "description": "Framing, error control, medium access, Ethernet switching, IP addressing and routing protocols.",
+      "topics": [
+        {
+          "slug": "01-data-link-layer",
+          "title": "Data Link Layer: Framing, Error Control and MAC",
+          "description": "Framing methods, parity, Hamming codes, CRC, ARQ protocols, CSMA/CD, CSMA/CA, Ethernet and switches.",
+          "documents": [
+            {"file": "framing-and-error-control-notes.md", "title": "Framing, Error Detection and Reliable Delivery — Lecture Notes", "description": "Bit and byte stuffing, Hamming distance, a worked CRC division, and Stop-and-Wait, Go-Back-N and Selective Repeat with window limits.", "format": "pdf", "category": "Lecture notes"},
+            {"file": "mac-protocols-and-ethernet.md", "title": "Medium Access Control, Ethernet and Switching", "description": "ALOHA, CSMA variants, CSMA/CD versus CSMA/CA, the Ethernet frame format and the switch self-learning algorithm.", "format": "docx", "category": "Lecture notes"}
+          ]
+        },
+        {
+          "slug": "02-ip-addressing-routing",
+          "title": "IP Addressing, Subnetting and Routing",
+          "description": "IPv4 header, classful and CIDR addressing, subnetting, NAT, IPv6 and routing algorithms and protocols.",
+          "documents": [
+            {"file": "ip-addressing-and-routing-notes.md", "title": "IP Addressing, Subnetting and Routing — Lecture Notes", "description": "IPv4 header fields, a /26 subnetting example, NAT, IPv6, distance-vector versus link-state routing and a RIP/OSPF/BGP comparison.", "format": "pdf", "category": "Lecture notes"},
+            {"file": "subnetting-practice-problems.md", "title": "Subnetting Practice Problems — Worked Solutions", "description": "Seven solved problems covering network and broadcast addresses, fixed-length subnetting, VLSM, summarisation and longest prefix match.", "format": "docx", "category": "Worked examples"}
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "03-transport-application",
+      "title": "Unit 3 · Transport and Application Layers",
+      "description": "End-to-end transport with TCP and UDP, and the core Internet application protocols.",
+      "topics": [
+        {
+          "slug": "01-tcp-udp",
+          "title": "TCP and UDP",
+          "description": "Ports, segment formats, connection management, flow control and congestion control.",
+          "documents": [
+            {"file": "tcp-and-udp-notes.md", "title": "TCP and UDP — Lecture Notes", "description": "UDP and TCP headers, the three-way handshake and teardown, RTO estimation, flow control and Reno congestion control with a cwnd trace.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        },
+        {
+          "slug": "02-application-protocols",
+          "title": "Application Layer Protocols: DNS, HTTP and Email",
+          "description": "DNS resolution and records, HTTP methods, status codes and versions, email protocols and the TLS handshake.",
+          "documents": [
+            {"file": "dns-http-email-notes.md", "title": "Application Layer Protocols: DNS, HTTP, Email and TLS — Lecture Notes", "description": "DNS hierarchy and record types, HTTP semantics and HTTP/1.1 versus HTTP/2 versus HTTP/3, SMTP/POP3/IMAP and TLS 1.3.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        }
+      ]
+    }
+  ]
+}

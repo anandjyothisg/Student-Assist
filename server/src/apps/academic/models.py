@@ -139,3 +139,44 @@ class Enrollment(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.student.get_full_name()} → {self.course.code}"
+
+
+# ---------------------------------------------------------------------------
+# Course structure: Unit → Topic (documents attach to a Topic)
+# ---------------------------------------------------------------------------
+
+
+class Unit(BaseModel):
+    """A unit / module inside a course (e.g. "Unit 2 · Search and Problem Solving")."""
+
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="units", verbose_name=_("course"))
+    title = models.CharField(_("title"), max_length=200)
+    description = models.TextField(_("description"), blank=True)
+    order = models.PositiveIntegerField(_("order"), default=0, db_index=True)
+
+    class Meta:
+        db_table = "academic_unit"
+        verbose_name = _("Unit")
+        verbose_name_plural = _("Units")
+        ordering = ["order", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.course.code} · {self.title}"
+
+
+class Topic(BaseModel):
+    """A topic inside a unit. Documents are filed under topics."""
+
+    unit = models.ForeignKey(Unit, on_delete=models.CASCADE, related_name="topics", verbose_name=_("unit"))
+    title = models.CharField(_("title"), max_length=200)
+    description = models.TextField(_("description"), blank=True)
+    order = models.PositiveIntegerField(_("order"), default=0, db_index=True)
+
+    class Meta:
+        db_table = "academic_topic"
+        verbose_name = _("Topic")
+        verbose_name_plural = _("Topics")
+        ordering = ["order", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.unit} · {self.title}"

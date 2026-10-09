@@ -6,15 +6,24 @@ Covers: custom token claims, registration, logout, password change.
 
 import logging
 
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
+from datetime import timedelta
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.models import User
+from apps.accounts.models import PasswordResetOTP, User
 from apps.accounts.serializers import UserProfileSerializer
+from apps.accounts.services import generate_otp, send_password_reset_email
 
 logger = logging.getLogger("apps.accounts")
+
+# Generic, enumeration-safe error message — never reveals whether an
+# email/account exists.
+INVALID_OTP_MESSAGE = "Invalid or expired code."
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +149,9 @@ class LogoutSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Invalid or expired refresh token."
             )
+        request = self.context.get("request")
+        if request and str(self._token.get("user_id")) != str(request.user.id):
+            raise serializers.ValidationError("This refresh token belongs to a different user.")
         return value
 
     def save(self, **kwargs) -> None:
@@ -194,5 +206,129 @@ class PasswordChangeSerializer(serializers.Serializer):
         user: User = self.context["request"].user
         user.set_password(self.validated_data["new_password"])
         user.save(update_fields=["password", "updated_at"])
+        return user
+
+
+# ---------------------------------------------------------------------------
+# Password Reset (forgot password) — request / verify / confirm
+# ---------------------------------------------------------------------------
+
+
+OTP_LIFETIME = timedelta(minutes=10)
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    """
+    Issues a password-reset OTP by email.
+
+    Always "succeeds" from the caller's perspective, whether or not the
+    account exists, to avoid leaking which emails are registered.
+    """
+
+    email = serializers.EmailField()
+
+    def save(self, **kwargs) -> None:
+        email = self.validated_data["email"].strip().lower()
+        try:
+            user = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            logger.info(f"[password_reset] Forgot-password requested for unknown email: {email}")
+            return
+
+        # Invalidate any prior unused codes for this user.
+        PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+
+        otp = generate_otp()
+        PasswordResetOTP.objects.create(
+            user=user,
+            otp_hash=make_password(otp),
+            expires_at=timezone.now() + OTP_LIFETIME,
+        )
+        send_password_reset_email(user, otp)
+        logger.info(f"[password_reset] OTP issued for: {user.email}")
+
+
+def _get_valid_otp_or_raise(email: str, otp: str) -> PasswordResetOTP:
+    """
+    Shared lookup used by both verify-otp and reset-confirm. Always raises
+    the same generic error on any failure (unknown email, expired code,
+    wrong code, locked-out code) so a caller can't distinguish them.
+    """
+    try:
+        user = User.objects.get(email__iexact=email.strip().lower())
+    except User.DoesNotExist:
+        raise serializers.ValidationError(INVALID_OTP_MESSAGE)
+
+    otp_row = (
+        PasswordResetOTP.objects.filter(user=user, is_used=False)
+        .order_by("-created_at")
+        .first()
+    )
+    if not otp_row or not otp_row.is_valid():
+        raise serializers.ValidationError(INVALID_OTP_MESSAGE)
+
+    if not check_password(otp, otp_row.otp_hash):
+        otp_row.attempts += 1
+        otp_row.save(update_fields=["attempts", "updated_at"])
+        raise serializers.ValidationError(INVALID_OTP_MESSAGE)
+
+    return otp_row
+
+
+class VerifyResetOtpSerializer(serializers.Serializer):
+    """
+    UX-only check used by the OTP screen before letting the user proceed
+    to set a new password. Does NOT consume the code — reset-confirm
+    re-validates it independently as the real security boundary.
+    """
+
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6, min_length=6)
+
+    def validate(self, attrs: dict) -> dict:
+        _get_valid_otp_or_raise(attrs["email"], attrs["otp"])
+        return attrs
+
+
+class ResetPasswordConfirmSerializer(serializers.Serializer):
+    """
+    Consumes a valid OTP and sets a new password. On success, blacklists
+    every outstanding JWT for the user — a reset implies the account may
+    have been compromised, so all existing sessions are forced to re-login.
+    """
+
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6, min_length=6)
+    new_password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+        style={"input_type": "password"},
+        help_text="Minimum 8 characters.",
+    )
+    confirm_password = serializers.CharField(
+        write_only=True,
+        style={"input_type": "password"},
+    )
+
+    def validate(self, attrs: dict) -> dict:
+        otp_row = _get_valid_otp_or_raise(attrs["email"], attrs["otp"])
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        validate_password(attrs["new_password"], user=otp_row.user)
+        self._otp_row = otp_row
+        return attrs
+
+    def save(self, **kwargs) -> User:
+        user = self._otp_row.user
+        user.set_password(self.validated_data["new_password"])
+        user.save(update_fields=["password", "updated_at"])
+
+        self._otp_row.is_used = True
+        self._otp_row.save(update_fields=["is_used", "updated_at"])
+
+        for token in OutstandingToken.objects.filter(user=user):
+            BlacklistedToken.objects.get_or_create(token=token)
+
+        logger.info(f"[password_reset] Password reset completed for: {user.email}")
         return user
 

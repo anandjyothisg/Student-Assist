@@ -1,231 +1,134 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileDrawer';
 import { TopNav } from './TopNav';
 import { CommandPalette } from './CommandPalette';
 import { SettingsModal } from './SettingsModal';
+import { useMediaQuery } from '../ui/useMediaQuery';
 
-// These MUST match the actual rendered widths in Sidebar.jsx
-const SIDEBAR_COLLAPSED_WIDTH = 68;  // px — matches `isCollapsed ? 68 : 240` in Sidebar
-const SIDEBAR_EXPANDED_WIDTH  = 240; // px — matches `isCollapsed ? 68 : 240` in Sidebar
-const MOBILE_NAV_HEIGHT       = 56;  // px — matches MobileNav h-16 (64px) minus top border
+/** Screens that manage their own height/scroll (chat, split-pane viewer). */
+const FULL_HEIGHT_TABS = new Set(['assistant', 'documents']);
 
-const FULL_HEIGHT_TABS = new Set([
-  'assistant',
-  'ask',
-  'documents',
-  'sources',
-  'notebook',
-]);
+const SIDEBAR_PREF_KEY = 'sidebar-collapsed';
 
-export function AppShell({
-  children,
-  activeTab,
-  setActiveTab,
-  user,
-  onLogout,
-  onUpdateUser,
-}) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [isCommandOpen, setIsCommandOpen]       = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen]     = useState(false);
-  const [isMobile, setIsMobile]                 = useState(false);
+export function AppShell({ children, activeTab, setActiveTab, user, onLogout, onUpdateUser }) {
+  const isMobile = useMediaQuery('(max-width: 767.98px)');
+  const isTablet = useMediaQuery('(max-width: 1023.98px)');
+  const [userCollapsed, setUserCollapsed] = useState(() => {
+    try { return localStorage.getItem(SIDEBAR_PREF_KEY) === '1'; } catch { return false; }
+  });
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Responsive breakpoint detection
+  const collapsed = isTablet || userCollapsed;
+  const toggleSidebar = () => {
+    setUserCollapsed((v) => {
+      try { localStorage.setItem(SIDEBAR_PREF_KEY, v ? '0' : '1'); } catch { /* ignore */ }
+      return !v;
+    });
+  };
+
   useEffect(() => {
-    const check = () => {
-      const w = window.innerWidth;
-      setIsMobile(w < 768);
-      if (w < 1024) setSidebarCollapsed(true);
-    };
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-
-  // ⌘K command palette
-  useEffect(() => {
-    const handleKeyDown = (e) => {
+    const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setIsCommandOpen((prev) => !prev);
+        setIsCommandOpen((v) => !v);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Stable reference — useCallback ensures addEventListener/removeEventListener
-  // always get the same function object, preventing listener accumulation on re-renders.
-  const handleOpenSettings = useCallback(() => {
-    setIsSettingsOpen(true);
-  }, []);
+  const openSettings = useCallback(() => setIsSettingsOpen(true), []);
+  const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
+  const closeCommand = useCallback(() => setIsCommandOpen(false), []);
 
   useEffect(() => {
-    window.addEventListener('open-settings', handleOpenSettings);
-    return () => window.removeEventListener('open-settings', handleOpenSettings);
-  }, [handleOpenSettings]);
+    window.addEventListener('open-settings', openSettings);
+    return () => window.removeEventListener('open-settings', openSettings);
+  }, [openSettings]);
 
   const isFullHeight = FULL_HEIGHT_TABS.has(activeTab);
 
-  // Width offset for the fixed sidebar
-  const sidebarWidth = isMobile
-    ? 0
-    : sidebarCollapsed
-      ? SIDEBAR_COLLAPSED_WIDTH
-      : SIDEBAR_EXPANDED_WIDTH;
-
-  const role = user?.role || 'student';
-  const maxWidthClass =
-    role === 'teacher'
-      ? 'max-w-[1100px]'
-      : role === 'admin'
-        ? 'max-w-[1200px]'
-        : 'max-w-[880px]';
-
-  // Content padding responds to three tiers: mobile / tablet / desktop
-  const contentPadding = isMobile
-    ? '16px 16px'
-    : window.innerWidth < 1024
-      ? '24px 24px'
-      : '32px 40px';
-
   return (
-    // Outer shell: exactly viewport height, no scroll
-    <div
-      className="flex overflow-hidden"
-      style={{
-        height: '100dvh',
-        background: 'var(--bg)',
-        color: 'var(--fg)',
-      }}
-    >
-      {/* Command palette — rendered outside layout flow to avoid z-index issues */}
+    <div className="flex h-dvh overflow-hidden bg-canvas text-fg">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:rounded-md focus:bg-fg focus:px-3 focus:py-2 focus:text-sm focus:text-canvas"
+        style={{ zIndex: 'var(--z-toast)' }}
+      >
+        Skip to content
+      </a>
+
       <CommandPalette
         isOpen={isCommandOpen}
-        onClose={() => setIsCommandOpen(false)}
+        onClose={closeCommand}
         setActiveTab={setActiveTab}
         user={user}
+        onOpenSettings={openSettings}
+        onLogout={onLogout}
       />
 
-      {/* Single SettingsModal instance — mounted/unmounted via AnimatePresence inside */}
       <SettingsModal
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={closeSettings}
         user={user}
-        onLogout={() => {
-          setIsSettingsOpen(false);
-          onLogout?.();
-        }}
+        onLogout={() => { setIsSettingsOpen(false); onLogout?.(); }}
         onUpdateUser={onUpdateUser}
       />
 
-      {/* Desktop Sidebar — only rendered on md+ screens */}
       {!isMobile && (
         <Sidebar
-          isCollapsed={sidebarCollapsed}
-          setIsCollapsed={setSidebarCollapsed}
+          isCollapsed={collapsed}
+          canToggle={!isTablet}
+          onToggle={toggleSidebar}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           user={user}
           onLogout={onLogout}
+          onOpenSettings={openSettings}
         />
       )}
 
-      {/* Mobile Bottom Nav */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <TopNav
+          activeTab={activeTab}
+          user={user}
+          onOpenCommandPalette={() => setIsCommandOpen(true)}
+          onOpenSettings={openSettings}
+        />
+
+        {isFullHeight ? (
+          <main id="main" tabIndex={-1} className={`flex min-h-0 flex-1 flex-col overflow-hidden outline-none ${isMobile ? 'mobile-safe-bottom' : ''}`}>
+            {children}
+          </main>
+        ) : (
+          <main id="main" tabIndex={-1} className={`min-h-0 flex-1 overflow-y-auto outline-none ${isMobile ? 'mobile-safe-bottom' : ''}`}>
+            <div className="mx-auto w-full max-w-[1160px] px-4 pt-6 pb-12 sm:px-6 md:px-8 md:pt-8 lg:px-10 lg:pt-10">
+              {children}
+            </div>
+          </main>
+        )}
+      </div>
+
       {isMobile && (
         <MobileNav
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           user={user}
           onLogout={onLogout}
+          onOpenSettings={openSettings}
         />
       )}
-
-      {/* Main column: offset by the fixed sidebar width */}
-      <div
-        className="flex flex-col flex-1 overflow-hidden"
-        style={{
-          marginLeft: isMobile ? 0 : `${sidebarWidth}px`,
-          transition: 'margin-left 250ms cubic-bezier(0.4, 0, 0.2, 1)',
-          height: '100dvh',
-        }}
-      >
-        {/* Top Nav — fixed height, never shrinks */}
-        <div className="flex-shrink-0">
-          <TopNav
-            activeTab={activeTab}
-            user={user}
-            onOpenCommandPalette={() => setIsCommandOpen(true)}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-          />
-        </div>
-
-        {/* Content area */}
-        {isFullHeight ? (
-          // Full-height tabs: fill all remaining space, no scroll on this wrapper
-          <main
-            className="flex-1 flex flex-col overflow-hidden min-h-0"
-            style={{
-              paddingBottom: isMobile ? `${MOBILE_NAV_HEIGHT}px` : 0,
-            }}
-          >
-            {children}
-          </main>
-        ) : (
-          // Scrollable content tabs
-          <main
-            className="flex-1 overflow-y-auto"
-            style={{
-              paddingBottom: isMobile
-                ? `${MOBILE_NAV_HEIGHT + 24}px`
-                : '48px',
-            }}
-          >
-            <div
-              className={`w-full ${maxWidthClass} mx-auto`}
-              style={{ padding: contentPadding }}
-            >
-              {children}
-            </div>
-          </main>
-        )}
-      </div>
     </div>
   );
 }
 
-export function StudentLayout(props) {
+/** Wrapper used by App — forwards every prop (including onUpdateUser) to the shell. */
+export function Layout(props) {
   return <AppShell {...props} />;
 }
 
-export function TeacherLayout(props) {
-  return <AppShell {...props} />;
-}
-
-export function AdminLayout(props) {
-  return <AppShell {...props} />;
-}
-
-export function Layout({
-  children,
-  activeTab: externalActiveTab,
-  setActiveTab: externalSetActiveTab,
-  user,
-  onLogout,
-}) {
-  const [localTab, setLocalTab] = useState('assistant');
-  const activeTab   = externalActiveTab   ?? localTab;
-  const setActiveTab = externalSetActiveTab ?? setLocalTab;
-
-  return (
-    <AppShell
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      user={user}
-      onLogout={onLogout}
-    >
-      {children}
-    </AppShell>
-  );
-}
+export const StudentLayout = AppShell;
+export const TeacherLayout = AppShell;
+export const AdminLayout = AppShell;

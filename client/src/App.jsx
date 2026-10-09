@@ -1,421 +1,214 @@
-import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Search, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 
 import api, { mockAuthApi } from './components/auth/api';
 import { ThemeProvider } from './components/ui/Theme';
 import { ToastProvider, useToast } from './components/ui/Toast';
+import { BrandMark } from './components/ui/BrandMark';
 import { Layout } from './components/layout/Layout';
+import { getDefaultTab, isTabAllowedForRole, readRoute, routeHref } from './components/layout/navConfig';
+import { AuthLayout } from './components/auth/AuthLayout';
 import { Login } from './components/auth/Login';
 import { Register } from './components/auth/Register';
 import { ForgotPassword } from './components/auth/ForgotPassword';
 import { OtpVerification } from './components/auth/OtpVerification';
 import { ResetPassword } from './components/auth/ResetPassword';
-import { AdminDashboard } from './components/dashboard/AdminDashboard';
-import { TeacherDashboard } from './components/dashboard/TeacherDashboard';
-import { AskScreen } from './components/ask/AskScreen';
-import { DocumentViewer } from './components/viewer/DocumentViewer';
-import { AnalyticsPage } from './components/dashboard/AnalyticsPage';
-import { Notebook } from './components/notebook/Notebook';
 
+// Screens are split per route so the sign-in page doesn't download the whole app.
+const AdminDashboard = lazy(() => import('./components/dashboard/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
+const TeacherDashboard = lazy(() => import('./components/dashboard/TeacherDashboard').then((m) => ({ default: m.TeacherDashboard })));
+const AnalyticsPage = lazy(() => import('./components/dashboard/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })));
+const AskScreen = lazy(() => import('./components/ask/AskScreen').then((m) => ({ default: m.AskScreen })));
+const DocumentViewer = lazy(() => import('./components/viewer/DocumentViewer').then((m) => ({ default: m.DocumentViewer })));
+const Notebook = lazy(() => import('./components/notebook/Notebook').then((m) => ({ default: m.Notebook })));
+const AdminUsers = lazy(() => import('./components/admin/AdminUsers').then((m) => ({ default: m.AdminUsers })));
+const AdminCatalog = lazy(() => import('./components/admin/AdminCatalog').then((m) => ({ default: m.AdminCatalog })));
+const CoursesPage = lazy(() => import('./components/courses/CoursesPage').then((m) => ({ default: m.CoursesPage })));
 
-/* ─── Shared Input/Cell Styles ───────────────────────────────────────────── */
-const inputBase = {
-  width: '100%',
-  height: '36px',
-  padding: '0 0.875rem 0 2.25rem',
-  borderRadius: '4px',
-  border: '1px solid var(--border)',
-  background: 'var(--bg-surface)',
-  color: 'var(--fg)',
-  fontFamily: 'var(--font-sans)',
-  fontSize: '12px',
-  outline: 'none',
-};
+/* ─── Hash routing (#/notebook, #/documents?doc=…) — survives refresh & back/forward ─── */
+const readHashTab = () => readRoute().tab;
 
-/* ─── Admin: Users ───────────────────────────────────────────────────────── */
-function AdminUsersPlaceholder() {
-  const [query, setQuery] = useState('');
-  const [sortAsc, setSortAsc] = useState(true);
+function writeHashTab(tab, { replace = false, params } = {}) {
+  const next = routeHref(tab, params ?? (readRoute().tab === tab ? readRoute().params : {}));
+  if (window.location.hash === next) return;
+  if (replace) window.history.replaceState(null, '', next);
+  else window.history.pushState(null, '', next);
+  window.dispatchEvent(new Event('routechange'));
+}
 
-  const initialUsers = [
-    { id: 1, name: 'Anand Jyothis G', email: 'admin@demo.com', role: 'Admin', status: 'Active' },
-    { id: 2, name: 'Prof. Sarah Jenkins', email: 'sarah@university.edu', role: 'Teacher', status: 'Active' },
-    { id: 3, name: 'Alex Rivera', email: 'alex.r@student.edu', role: 'Student', status: 'Active' },
-    { id: 4, name: 'Elena Rostova', email: 'elena.r@student.edu', role: 'Student', status: 'Active' },
-    { id: 5, name: 'Marcus Vance', email: 'marcus.v@student.edu', role: 'Student', status: 'Inactive' },
-  ];
+function mapUser(data) {
+  return {
+    id: data.id,
+    username: data.full_name || data.username || data.email.split('@')[0],
+    email: data.email,
+    role: data.role || 'student',
+    avatar: data.avatar_url || null,
+    program: data.program || '',
+    yearOfStudy: data.year_of_study || null,
+    studentNumber: data.student_number || '',
+    department: data.department || '',
+    designation: data.designation || '',
+  };
+}
 
-  const filtered = initialUsers
-    .filter(u =>
-      u.name.toLowerCase().includes(query.toLowerCase()) ||
-      u.email.toLowerCase().includes(query.toLowerCase()) ||
-      u.role.toLowerCase().includes(query.toLowerCase())
-    )
-    .sort((a, b) => sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
-
+function FullScreenLoader() {
   return (
-    <div className="flex flex-col gap-6 font-sans">
-      {/* Header */}
-      <div
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5"
-        style={{ borderBottom: '1px solid var(--border)' }}
-      >
-        <div>
-          <h2 className="hero-title" style={{ fontSize: '1.875rem' }}>User Directory</h2>
-          <p className="font-sans font-normal mt-1" style={{ fontSize: '13px', color: 'var(--fg-3)' }}>
-            Manage platform authorization, roles, and active sessions.
-          </p>
-        </div>
-        <span className="keycap">{filtered.length} Users</span>
-      </div>
-
-      {/* Controls */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-72">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--fg-3)' }} />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, email, or role…"
-            style={inputBase}
-            onFocus={(e) => e.currentTarget.style.borderColor = 'var(--border-hover)'}
-            onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
-          />
-        </div>
-        <button
-          onClick={() => setSortAsc(!sortAsc)}
-          className="flex items-center gap-2 cursor-pointer transition-all font-sans"
-          style={{
-            padding: '0.375rem 0.875rem',
-            borderRadius: '9999px',
-            border: '1px solid var(--border)',
-            background: 'var(--bg-surface)',
-            color: 'var(--fg-2)',
-            fontSize: '12px',
-            whiteSpace: 'nowrap',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--fg)'; e.currentTarget.style.borderColor = 'var(--border-hover)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--fg-2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
-        >
-          <ArrowUpDown className="w-3.5 h-3.5" />
-          <span>Name ({sortAsc ? 'A–Z' : 'Z–A'})</span>
-        </button>
-      </div>
-
-      {/* Table */}
-      <div
-        className="overflow-x-auto rounded-xl"
-        style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', boxShadow: 'var(--shadow-premium-sm)' }}
-      >
-        <table className="w-full text-left" style={{ fontSize: '12px' }}>
-          <thead style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
-            <tr>
-              {['Name', 'Email', 'Role', 'Status'].map(h => (
-                <th key={h} className="p-4 font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)', fontSize: '10px' }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="p-8 text-center" style={{ color: 'var(--fg-3)' }}>
-                  No users matching "{query}".
-                </td>
-              </tr>
-            ) : (
-              filtered.map(u => (
-                <tr key={u.id} style={{ borderTop: '1px solid var(--border)', color: 'var(--fg)' }}>
-                  <td className="p-4 font-medium" style={{ color: 'var(--fg)' }}>{u.name}</td>
-                  <td className="p-4 font-mono" style={{ color: 'var(--fg-3)' }}>{u.email}</td>
-                  <td className="p-4">
-                    <span className="keycap">{u.role}</span>
-                  </td>
-                  <td className="p-4">
-                    <span
-                      className="keycap"
-                      style={{
-                        color: u.status === 'Active' ? 'var(--success)' : 'var(--fg-3)',
-                        background: u.status === 'Active' ? 'var(--success-dim)' : 'var(--bg-subtle)',
-                        borderColor: u.status === 'Active' ? 'var(--success)' : 'var(--border)',
-                      }}
-                    >
-                      {u.status}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-
-        {/* Pagination */}
-        <div
-          className="p-4 flex items-center justify-between"
-          style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-subtle)', fontSize: '11px', color: 'var(--fg-3)' }}
-        >
-          <span>Showing {filtered.length} of {initialUsers.length}</span>
-          <div className="flex items-center gap-1">
-            <button
-              className="p-1.5 rounded-lg opacity-40 cursor-not-allowed"
-              style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--fg-3)' }}
-              disabled
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <span className="px-2 font-mono" style={{ color: 'var(--fg-2)' }}>1</span>
-            <button
-              className="p-1.5 rounded-lg opacity-40 cursor-not-allowed"
-              style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--fg-3)' }}
-              disabled
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
+    <div className="flex min-h-dvh items-center justify-center bg-canvas" role="status" aria-label="Loading">
+      <div className="flex flex-col items-center gap-4">
+        <BrandMark size={40} className="animate-[status-pulse_1.6s_ease-in-out_infinite]" />
+        <span className="text-[13px] text-fg-3">Loading your workspace…</span>
       </div>
     </div>
   );
 }
 
-/* ─── Admin: Subjects ────────────────────────────────────────────────────── */
-function AdminSubjectsPlaceholder() {
-  const [query, setQuery] = useState('');
-
-  const subjects = [
-    { id: 'CS-301',   title: 'Data Structures & Algorithms', department: 'Computer Science', docs: 12 },
-    { id: 'MATH-202', title: 'Numerical Analysis',           department: 'Mathematics',       docs: 8 },
-    { id: 'PHY-101',  title: 'Introductory Physics',         department: 'Physics',           docs: 4 },
-  ];
-
-  const filtered = subjects.filter(s =>
-    s.id.toLowerCase().includes(query.toLowerCase()) ||
-    s.title.toLowerCase().includes(query.toLowerCase()) ||
-    s.department.toLowerCase().includes(query.toLowerCase())
-  );
-
+function ScreenFallback() {
   return (
-    <div className="flex flex-col gap-6 font-sans">
-      {/* Header */}
-      <div
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5"
-        style={{ borderBottom: '1px solid var(--border)' }}
-      >
-        <div>
-          <h2 className="hero-title" style={{ fontSize: '1.875rem' }}>Curriculum Catalog</h2>
-          <p className="font-sans font-normal mt-1" style={{ fontSize: '13px', color: 'var(--fg-3)' }}>
-            Course index, vector collections, and syllabus registry.
-          </p>
-        </div>
-        <span className="keycap">{filtered.length} Courses</span>
-      </div>
-
-      {/* Search */}
-      <div className="relative w-full sm:w-72">
-        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--fg-3)' }} />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter courses…"
-          style={inputBase}
-          onFocus={(e) => e.currentTarget.style.borderColor = 'var(--border-hover)'}
-          onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
-        />
-      </div>
-
-      {/* Table */}
-      <div
-        className="overflow-x-auto rounded-xl"
-        style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', boxShadow: 'var(--shadow-premium-sm)' }}
-      >
-        <table className="w-full text-left" style={{ fontSize: '12px' }}>
-          <thead style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
-            <tr>
-              {['Code', 'Title', 'Department', 'Indexed Files'].map(h => (
-                <th key={h} className="p-4 font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)', fontSize: '10px' }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="p-8 text-center" style={{ color: 'var(--fg-3)' }}>No courses found.</td>
-              </tr>
-            ) : (
-              filtered.map(s => (
-                <tr key={s.id} style={{ borderTop: '1px solid var(--border)', color: 'var(--fg)' }}>
-                  <td className="p-4">
-                    <span className="keycap font-mono" style={{ color: 'var(--accent)', background: 'var(--accent-dim)', borderColor: 'var(--accent)' }}>
-                      {s.id}
-                    </span>
-                  </td>
-                  <td className="p-4 font-medium" style={{ color: 'var(--fg)' }}>{s.title}</td>
-                  <td className="p-4" style={{ color: 'var(--fg-3)' }}>{s.department}</td>
-                  <td className="p-4 font-mono" style={{ color: 'var(--fg-3)' }}>{s.docs} files</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+    <div className="flex flex-1 items-center justify-center py-24" role="status" aria-label="Loading">
+      <span className="ai-dot" /><span className="ai-dot mx-1" /><span className="ai-dot" />
     </div>
   );
 }
 
-/* ─── App Content ────────────────────────────────────────────────────────── */
 function AppContent() {
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [authScreen, setAuthScreen] = useState('login');
-  const [authEmail, setAuthEmail] = useState('admin@demo.com');
-
-
   const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
+  const [activeTab, setActiveTabState] = useState(readHashTab);
+  const [authScreen, setAuthScreen] = useState('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authOtp, setAuthOtp] = useState('');
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        setUser(null);
-        setLoadingUser(false);
-        setActiveTab('auth');
-        setAuthScreen('login');
-        return;
-      }
+  /* Resolve which tab to show: hash request if allowed, else the role's home. */
+  const resolveTab = useCallback((role, requested) =>
+    requested && isTabAllowedForRole(role, requested) ? requested : getDefaultTab(role), []);
 
-      try {
-        const res = await api.get('/auth/me/');
-        setUser({
-          username: res.data.full_name || res.data.username || res.data.email.split('@')[0],
-          email: res.data.email,
-          role: res.data.role || 'student',
-          avatar: res.data.avatar || null,
-        });
-      } catch {
-        setUser(null);
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        setActiveTab('auth');
-        setAuthScreen('login');
-      } finally {
-        setLoadingUser(false);
-      }
-    };
-    checkAuth();
+  const setActiveTab = useCallback((tab, params) => {
+    setActiveTabState(tab);
+    writeHashTab(tab, { params: params ?? {} });
   }, []);
 
+  const signIn = useCallback((u) => {
+    // Tokens were just issued — fetch the full profile (academic fields, avatar).
+    api.get('/auth/me/').then((r) => setUser(mapUser(r.data))).catch(() => {});
+    setUser(u);
+    const tab = resolveTab(u.role, readHashTab());
+    setActiveTabState(tab);
+    writeHashTab(tab, { replace: true });
+  }, [resolveTab]);
+
+  /* Boot: restore the session if there is a token. */
   useEffect(() => {
-    const handleAuthExpired = () => {
-      setUser(null);
-      setActiveTab('auth');
-      setAuthScreen('login');
-      toast.error('Session expired. Please sign in again.');
+    let cancelled = false;
+    (async () => {
+      if (!localStorage.getItem('accessToken')) { setLoadingUser(false); return; }
+      try {
+        const res = await api.get('/auth/me/');
+        if (cancelled) return;
+        const u = mapUser(res.data);
+        setUser(u);
+        const requested = readHashTab();
+        const tab = resolveTab(u.role, requested);
+        if (requested && requested !== tab) toast.error("You don't have access to that section.");
+        setActiveTabState(tab);
+        writeHashTab(tab, { replace: true, params: requested === tab ? readRoute().params : {} });
+      } catch {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+      } finally {
+        if (!cancelled) setLoadingUser(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* Back/forward buttons. */
+  useEffect(() => {
+    const onHash = () => {
+      if (!user) return;
+      const requested = readHashTab();
+      const tab = resolveTab(user.role, requested);
+      if (requested && requested !== tab) {
+        toast.error("You don't have access to that section.");
+        writeHashTab(tab, { replace: true });
+      }
+      setActiveTabState(tab);
     };
-    window.addEventListener('auth-expired', handleAuthExpired);
-    return () => window.removeEventListener('auth-expired', handleAuthExpired);
+    window.addEventListener('popstate', onHash);
+    window.addEventListener('hashchange', onHash);
+    window.addEventListener('routechange', onHash);
+    return () => {
+      window.removeEventListener('popstate', onHash);
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener('routechange', onHash);
+    };
+  }, [user, resolveTab, toast]);
+
+  /* Token refresh failed somewhere — drop back to sign-in. */
+  useEffect(() => {
+    const onExpired = () => {
+      setUser(null);
+      setAuthScreen('login');
+      toast.error('Your session expired. Please sign in again.');
+    };
+    window.addEventListener('auth-expired', onExpired);
+    return () => window.removeEventListener('auth-expired', onExpired);
   }, [toast]);
 
-
-
   const handleLogout = async () => {
-    setLoadingUser(true);
     try {
       await mockAuthApi.logout();
-      setUser(null);
-      setActiveTab('auth');
-      setAuthScreen('login');
-      toast.success('Logged out successfully.');
-    } catch {
-      toast.error('Failed to log out.');
     } finally {
-      setLoadingUser(false);
+      setUser(null);
+      setAuthScreen('login');
+      window.history.replaceState(null, '', window.location.pathname);
+      toast.success('You’ve been signed out.');
     }
   };
 
-  /* ── Loading Screen ─────────────────────────────────────────────────── */
-  if (loadingUser) {
+  if (loadingUser) return <FullScreenLoader />;
+
+  if (!user) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center p-6"
-        style={{ background: 'var(--bg)' }}
-      >
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div
-            className="w-10 h-10 rounded-2xl flex items-center justify-center"
-            style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              color: 'var(--accent)',
-              animation: 'status-pulse 2s ease-in-out infinite',
-            }}
-          >
-            <ShieldCheck className="w-5 h-5" />
-          </div>
-          <span className="font-sans font-medium" style={{ fontSize: '12px', color: 'var(--fg-3)' }}>
-            Authenticating…
-          </span>
-        </div>
-      </div>
+      <AuthLayout>
+        {authScreen === 'login' && <Login onNavigate={setAuthScreen} onLoginSuccess={signIn} />}
+        {authScreen === 'register' && <Register onNavigate={setAuthScreen} onRegistered={signIn} />}
+        {authScreen === 'forgot-password' && (
+          <ForgotPassword onNavigate={setAuthScreen} setEmailState={setAuthEmail} defaultEmail={authEmail} />
+        )}
+        {authScreen === 'otp-verification' && (
+          <OtpVerification onNavigate={setAuthScreen} email={authEmail} setOtpState={setAuthOtp} />
+        )}
+        {authScreen === 'reset-password' && (
+          <ResetPassword onNavigate={setAuthScreen} email={authEmail} otp={authOtp} />
+        )}
+      </AuthLayout>
     );
   }
 
-  const currentTab = user ? (activeTab === 'auth' ? 'assistant' : activeTab) : 'auth';
+  const currentTab = resolveTab(user.role, activeTab);
+
+  const screen = {
+    dashboard: <AdminDashboard setActiveTab={setActiveTab} />,
+    academic: user.role === 'admin' ? <AdminCatalog user={user} /> : <TeacherDashboard user={user} />,
+    assistant: <AskScreen user={user} onNavigate={setActiveTab} />,
+    documents: <DocumentViewer user={user} onNavigate={setActiveTab} />,
+    courses: <CoursesPage user={user} onNavigate={setActiveTab} />,
+    accounts: <AdminUsers user={user} />,
+    analytics: <AnalyticsPage user={user} />,
+    notebook: <Notebook onNavigate={setActiveTab} />,
+  }[currentTab];
 
   return (
-    <>
-      {currentTab === 'auth' ? (
-        <div className="py-12 flex items-center justify-center min-h-screen p-6" style={{ background: 'var(--bg)' }}>
-          <div className="w-full max-w-md">
-            {authScreen === 'login' && (
-              <Login
-                onNavigate={setAuthScreen}
-                onLoginSuccess={(loggedInUser) => {
-                  setUser(loggedInUser);
-                  const roleDefaults = { student: 'assistant', teacher: 'academic', admin: 'dashboard' };
-                  setActiveTab(roleDefaults[loggedInUser?.role] ?? 'assistant');
-                }}
-              />
-            )}
-            {authScreen === 'register' && <Register onNavigate={setAuthScreen} />}
-            {authScreen === 'forgot-password' && <ForgotPassword onNavigate={setAuthScreen} setEmailState={setAuthEmail} />}
-            {authScreen === 'otp-verification' && <OtpVerification onNavigate={setAuthScreen} email={authEmail} />}
-            {authScreen === 'reset-password' && <ResetPassword onNavigate={setAuthScreen} email={authEmail} />}
-          </div>
-        </div>
-      ) : (
-        <Layout
-          activeTab={currentTab}
-          setActiveTab={user ? setActiveTab : () => {}}
-          user={user}
-          onLogout={handleLogout}
-          onUpdateUser={setUser}
-        >
-          {currentTab === 'dashboard' ? (
-            <AdminDashboard setActiveTab={setActiveTab} />
-          ) : currentTab === 'academic' ? (
-            user?.role === 'admin' ? <AdminSubjectsPlaceholder /> : <TeacherDashboard />
-          ) : currentTab === 'assistant' ? (
-            <AskScreen user={user} />
-          ) : currentTab === 'documents' ? (
-            <DocumentViewer />
-          ) : currentTab === 'accounts' ? (
-            <AdminUsersPlaceholder />
-          ) : currentTab === 'analytics' ? (
-            <AnalyticsPage />
-          ) : currentTab === 'notebook' ? (
-            <Notebook />
-          ) : null}
-
-
-        </Layout>
-      )}
-    </>
+    <Layout
+      activeTab={currentTab}
+      setActiveTab={setActiveTab}
+      user={user}
+      onLogout={handleLogout}
+      onUpdateUser={setUser}
+    >
+      <Suspense fallback={<ScreenFallback />}>{screen}</Suspense>
+    </Layout>
   );
 }
 

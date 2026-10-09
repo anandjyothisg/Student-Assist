@@ -1,68 +1,37 @@
 import React from 'react';
 
-export function Badge({
-  children,
-  variant = 'subtle',
-  color   = 'neutral',
-  icon: Icon,
-  dot     = false,
-  className = '',
-  ...props
-}) {
-  const base = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium font-sans tracking-wide select-none';
+const tones = {
+  neutral: 'bg-subtle text-fg-2 border-border',
+  accent:  'bg-accent-dim text-accent border-transparent',
+  success: 'bg-success-dim text-success border-transparent',
+  warning: 'bg-warning-dim text-warning border-transparent',
+  error:   'bg-error-dim text-error border-transparent',
+  outline: 'bg-transparent text-fg-2 border-border',
+};
 
-  // Use CSS variables for theming — these adapt to dark/light mode automatically
-  const styles = {
-    solid: {
-      neutral: { background: 'var(--bg-hover)',    color: 'var(--fg)',    border: '1px solid var(--border)' },
-      accent:  { background: 'var(--accent)',       color: 'var(--accent-fg)', border: '1px solid var(--accent)' },
-      success: { background: 'var(--success)',      color: '#fff',        border: '1px solid var(--success)' },
-      warning: { background: 'var(--warning)',      color: '#fff',        border: '1px solid var(--warning)' },
-      error:   { background: 'var(--error)',        color: '#fff',        border: '1px solid var(--error)' },
-      info:    { background: 'var(--accent)',       color: 'var(--accent-fg)', border: '1px solid var(--accent)' },
-      primary: { background: 'var(--fg)',           color: 'var(--bg)',   border: '1px solid var(--fg)' },
-    },
-    subtle: {
-      neutral: { background: 'var(--bg-subtle)',   color: 'var(--fg-2)', border: '1px solid var(--border)' },
-      accent:  { background: 'var(--accent-dim)',  color: 'var(--accent)', border: '1px solid var(--accent)' },
-      success: { background: 'var(--success-dim)', color: 'var(--success)', border: '1px solid var(--success)' },
-      warning: { background: 'var(--warning-dim)', color: 'var(--warning)', border: '1px solid var(--warning)' },
-      error:   { background: 'var(--error-dim)',   color: 'var(--error)',  border: '1px solid var(--error)' },
-      info:    { background: 'var(--accent-dim)',  color: 'var(--accent)', border: '1px solid var(--accent)' },
-      primary: { background: 'var(--bg-subtle)',   color: 'var(--fg)',   border: '1px solid var(--border-hover)' },
-    },
-    outline: {
-      neutral: { background: 'transparent', color: 'var(--fg-2)',   border: '1px solid var(--border)' },
-      accent:  { background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)' },
-      success: { background: 'transparent', color: 'var(--success)', border: '1px solid var(--success)' },
-      warning: { background: 'transparent', color: 'var(--warning)', border: '1px solid var(--warning)' },
-      error:   { background: 'transparent', color: 'var(--error)',  border: '1px solid var(--error)' },
-      info:    { background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)' },
-      primary: { background: 'transparent', color: 'var(--fg)',     border: '1px solid var(--border-hover)' },
-    },
-  };
+const dots = {
+  neutral: 'bg-fg-3', accent: 'bg-accent', success: 'bg-success',
+  warning: 'bg-warning', error: 'bg-error', outline: 'bg-fg-3',
+};
 
-  const styleObj = (styles[variant] ?? styles.subtle)[color] ?? styles.subtle.neutral;
-
-  const dotColors = {
-    success: 'var(--success)',
-    warning: 'var(--warning)',
-    error:   'var(--error)',
-    accent:  'var(--accent)',
-    info:    'var(--accent)',
-    primary: 'var(--fg)',
-    neutral: 'var(--fg-3)',
-  };
-
+/**
+ * Badge — compact status/label chip. Rounded-rectangle, not pill.
+ * `color` is accepted as an alias of `tone` for backwards compatibility.
+ */
+export function Badge({ children, tone, color, dot = false, mono = false, icon: Icon, className = '', ...props }) {
+  const t = tone || color || 'neutral';
   return (
-    <span className={`${base} ${className}`} style={styleObj} {...props}>
-      {dot && (
-        <span
-          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-          style={{ background: dotColors[color] ?? dotColors.neutral }}
-        />
-      )}
-      {Icon && <Icon className="w-3 h-3 flex-shrink-0" />}
+    <span
+      className={[
+        'inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-sm border px-2 text-[11.5px] font-medium leading-none',
+        mono ? 'font-mono text-[11px] tracking-normal' : '',
+        tones[t] ?? tones.neutral,
+        className,
+      ].join(' ')}
+      {...props}
+    >
+      {dot && <span aria-hidden className={`size-1.5 rounded-full ${dots[t] ?? dots.neutral}`} />}
+      {Icon && <Icon aria-hidden className="size-3" />}
       {children}
     </span>
   );

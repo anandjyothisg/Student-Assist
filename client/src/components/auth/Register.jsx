@@ -1,227 +1,131 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { motion } from 'framer-motion';
-import { Eye, EyeOff } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useToast } from '../ui/Toast';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
+import { ErrorState } from '../ui/ErrorState';
+import { AuthStep, TextLink, EMAIL_PATTERN, STRONG_PASSWORD } from './AuthLayout';
 import { mockAuthApi } from './api';
 
-function AuthInput({ label, error, children }) {
+export function PasswordChecklist({ value = '' }) {
+  const rules = [
+    { ok: value.length >= 8, label: '8+ characters' },
+    { ok: /[A-Z]/.test(value) && /[a-z]/.test(value), label: 'Upper & lowercase' },
+    { ok: /\d/.test(value), label: 'A number' },
+  ];
   return (
-    <div className="flex flex-col gap-1.5">
-      {label && (
-        <label
-          className="text-[11px] font-medium uppercase tracking-widest"
-          style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}
-        >
-          {label}
-        </label>
-      )}
-      {children}
-      {error && (
-        <span className="text-[11px]" style={{ color: 'var(--error)' }}>
-          {error}
-        </span>
-      )}
-    </div>
+    <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Password requirements">
+      {rules.map((r) => (
+        <li key={r.label} className={`flex items-center gap-1.5 text-xs transition-colors ${r.ok ? 'text-success' : 'text-fg-3'}`}>
+          <span className={`inline-flex size-3.5 items-center justify-center rounded-full ${r.ok ? 'bg-success-dim' : 'border border-border-strong'}`}>
+            {r.ok && <Check className="size-2.5" strokeWidth={3} aria-hidden />}
+          </span>
+          {r.label}
+        </li>
+      ))}
+    </ul>
   );
 }
 
-function StyledInput({ hasError, extraClass = '', ...props }) {
-  return (
-    <input
-      className={`w-full h-11 px-4 rounded-md text-[14px] outline-none transition-all ${extraClass}`}
-      style={{
-        background: 'var(--bg-surface)',
-        border: `1px solid ${hasError ? 'var(--error)' : 'var(--border)'}`,
-        color: 'var(--fg)',
-        fontFamily: 'var(--font-sans)',
-      }}
-      onFocus={(e) => {
-        if (!hasError) e.currentTarget.style.borderColor = 'var(--border-hover)';
-      }}
-      onBlur={(e) => {
-        if (!hasError) e.currentTarget.style.borderColor = hasError ? 'var(--error)' : 'var(--border)';
-      }}
-      {...props}
-    />
-  );
-}
-
-export function Register({ onNavigate }) {
+export function Register({ onNavigate, onRegistered }) {
   const toast = useToast();
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm({
-    defaultValues: { username: '', email: '', password: '', confirmPassword: '' }
+    defaultValues: { username: '', email: '', password: '', confirmPassword: '' },
   });
-
   const passwordVal = watch('password');
 
   const onSubmit = async (data) => {
     setLoading(true);
+    setFormError('');
     try {
-      await mockAuthApi.register(data.username, data.email, data.password);
-      toast.success('Account created. Please sign in.');
-      if (onNavigate) onNavigate('login');
+      const res = await mockAuthApi.register(data.username, data.email, data.password);
+      if (res?.access && res?.user && onRegistered) {
+        toast.success('Your account is ready.');
+        onRegistered({
+          username: res.user.full_name || data.username.trim(),
+          email: res.user.email,
+          role: res.user.role || 'student',
+          avatar: res.user.avatar || null,
+        });
+      } else {
+        toast.success('Account created. Please sign in.');
+        onNavigate?.('login');
+      }
     } catch (err) {
-      toast.error(err.message || 'Registration failed.');
+      setFormError(err.message || 'We couldn’t create your account. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-      className="w-full"
+    <AuthStep
+      title="Create your account"
+      description="Students can sign up with their university email."
+      footer={<>Already have an account? <TextLink onClick={() => onNavigate?.('login')}>Sign in</TextLink></>}
     >
-      {/* Wordmark */}
-      <div className="mb-10">
-        <div className="flex items-center gap-2.5 mb-6">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{
-              background: 'var(--fg)',
-              color: 'var(--bg)',
-              fontFamily: 'var(--font-serif)',
-              fontSize: '15px',
-            }}
-          >
-            A
-          </div>
-          <span
-            className="text-[15px] font-medium"
-            style={{ color: 'var(--fg)', fontFamily: 'var(--font-sans)' }}
-          >
-            AuraStudy AI
-          </span>
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+        {formError && <ErrorState variant="inline" title="Couldn’t create account" description={formError} />}
+        <Input
+          label="Full name"
+          size="lg"
+          autoComplete="name"
+          placeholder="Maya Okafor"
+          error={errors.username?.message}
+          {...register('username', {
+            required: 'Enter your name.',
+            minLength: { value: 3, message: 'Use at least 3 characters.' },
+          })}
+        />
+        <Input
+          label="Email"
+          type="email"
+          size="lg"
+          autoComplete="email"
+          inputMode="email"
+          placeholder="you@university.edu"
+          error={errors.email?.message}
+          {...register('email', {
+            required: 'Enter your email address.',
+            pattern: { value: EMAIL_PATTERN, message: 'Enter a valid email address.' },
+          })}
+        />
+        <div className="flex flex-col gap-2">
+          <Input
+            label="Password"
+            size="lg"
+            revealable
+            autoComplete="new-password"
+            placeholder="Create a password"
+            error={errors.password?.message}
+            {...register('password', {
+              required: 'Create a password.',
+              minLength: { value: 8, message: 'Use at least 8 characters.' },
+              pattern: { value: STRONG_PASSWORD, message: 'Include upper and lowercase letters and a number.' },
+            })}
+          />
+          <PasswordChecklist value={passwordVal} />
         </div>
-
-        <h1
-          className="hero-title text-[32px] sm:text-[40px] mb-2"
-          style={{ color: 'var(--fg)' }}
-        >
-          Create account
-        </h1>
-        <p
-          className="text-[14px]"
-          style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}
-        >
-          Join your AI-powered learning workspace
-        </p>
-      </div>
-
-      {/* Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
-
-        {/* Username */}
-        <AuthInput label="Username" error={errors.username?.message}>
-          <StyledInput
-            type="text"
-            placeholder=" your username"
-            hasError={!!errors.username}
-            {...register('username', {
-              required: 'Username is required',
-              minLength: { value: 3, message: 'At least 3 characters' },
-            })}
-          />
-        </AuthInput>
-
-        {/* Email */}
-        <AuthInput label="Email" error={errors.email?.message}>
-          <StyledInput
-            type="text"
-            placeholder="you@university.edu"
-            hasError={!!errors.email}
-            {...register('email', {
-              required: 'Email is required',
-              pattern: {
-                value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                message: 'Invalid email address',
-              },
-            })}
-          />
-        </AuthInput>
-
-        {/* Password */}
-        <AuthInput label="Password" error={errors.password?.message}>
-          <div className="relative">
-            <StyledInput
-              type={showPassword ? 'text' : 'password'}
-              placeholder="••••••••"
-              hasError={!!errors.password}
-              extraClass="pr-11"
-              {...register('password', {
-                required: 'Password is required',
-                minLength: { value: 8, message: 'At least 8 characters' },
-                pattern: {
-                  value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-                  message: 'Must include uppercase, lowercase, and a number',
-                },
-              })}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer"
-              style={{ color: 'var(--fg-3)' }}
-              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--fg-2)'}
-              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--fg-3)'}
-              tabIndex={-1}
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </AuthInput>
-
-        {/* Confirm Password */}
-        <AuthInput label="Confirm Password" error={errors.confirmPassword?.message}>
-          <StyledInput
-            type={showPassword ? 'text' : 'password'}
-            placeholder="••••••••"
-            hasError={!!errors.confirmPassword}
-            {...register('confirmPassword', {
-              required: 'Please confirm your password',
-              validate: (val) => val === passwordVal || 'Passwords do not match',
-            })}
-          />
-        </AuthInput>
-
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full h-11 rounded-md text-[14px] font-medium mt-1 transition-all cursor-pointer disabled:opacity-50"
-          style={{
-            background: 'var(--fg)',
-            color: 'var(--bg)',
-            fontFamily: 'var(--font-sans)',
-          }}
-          onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = '0.9'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-        >
-          {loading ? 'Creating account...' : 'Create account'}
-        </button>
+        <Input
+          label="Confirm password"
+          size="lg"
+          revealable
+          autoComplete="new-password"
+          placeholder="Repeat your password"
+          error={errors.confirmPassword?.message}
+          {...register('confirmPassword', {
+            required: 'Confirm your password.',
+            validate: (val) => val === passwordVal || 'Passwords don’t match.',
+          })}
+        />
+        <Button type="submit" size="lg" fullWidth loading={loading} className="mt-2">
+          {loading ? 'Creating account…' : 'Create account'}
+        </Button>
       </form>
-
-      {/* Footer */}
-      <p
-        className="mt-6 text-[13px] text-center"
-        style={{ color: 'var(--fg-3)', fontFamily: 'var(--font-sans)' }}
-      >
-        Already have an account?{' '}
-        <button
-          onClick={() => onNavigate && onNavigate('login')}
-          className="font-medium cursor-pointer hover:underline"
-          style={{ color: 'var(--fg-2)' }}
-        >
-          Sign in
-        </button>
-      </p>
-    </motion.div>
+    </AuthStep>
   );
 }

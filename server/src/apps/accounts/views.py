@@ -7,6 +7,7 @@ token refresh, password change) will be added in the Auth API phase.
 
 import logging
 
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -19,6 +20,7 @@ from apps.accounts.models import User
 from apps.accounts.serializers import (
     UserCreateSerializer,
     UserListSerializer,
+    UserAdminUpdateSerializer,
     UserProfileSerializer,
     UserProfileUpdateSerializer,
     UserPublicSerializer,
@@ -59,7 +61,27 @@ class UserViewSet(
             return UserListSerializer
         if self.action == "create":
             return UserCreateSerializer
+        if self.action in ("update", "partial_update"):
+            return UserAdminUpdateSerializer
         return UserProfileSerializer
+
+    def create(self, request: Request, *args, **kwargs) -> Response:
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(UserListSerializer(user).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request: Request, *args, **kwargs) -> Response:
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        if serializer.validated_data.get("is_active") is False:
+            # Revoke outstanding sessions for a deactivated account.
+            from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+            for tok in OutstandingToken.objects.filter(user=instance):
+                BlacklistedToken.objects.get_or_create(token=tok)
+        return Response(UserListSerializer(instance).data)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -73,9 +95,9 @@ class UserViewSet(
             qs = qs.filter(is_active=is_active.lower() == "true")
         if search:
             qs = qs.filter(
-                models_Q(email__icontains=search)
-                | models_Q(first_name__icontains=search)
-                | models_Q(last_name__icontains=search)
+                Q(email__icontains=search)
+                | Q(first_name__icontains=search)
+                | Q(last_name__icontains=search)
             )
         return qs
 

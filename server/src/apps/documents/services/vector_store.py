@@ -46,7 +46,8 @@ def upsert_document_chunks(
     course_id: str, 
     document_id: str, 
     chunks: list[dict], 
-    embeddings: list[list[float]]
+    embeddings: list[list[float]],
+    extra_metadata: dict | None = None,
 ) -> None:
     """
     Upserts document chunks and their embeddings into the course collection.
@@ -74,6 +75,7 @@ def upsert_document_chunks(
         ids.append(chroma_id)
         documents.append(chunk["content"])
         metadatas.append({
+            **(extra_metadata or {}),
             "document_id": str(document_id),
             "course_id": str(course_id),
             "page_number": int(chunk["page_number"]),
@@ -116,21 +118,28 @@ def search_relevant_chunks(
         list of dict: [{"id": str, "content": str, "metadata": dict, "distance": float}]
     """
     collection = get_course_collection(course_id)
-    
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=top_k
-    )
-    
+    count = collection.count()
+    if count == 0:
+        return []
+
+    try:
+        results = collection.query(query_embeddings=[query_embedding], n_results=min(top_k, count))
+    except Exception as exc:
+        # Chroma 1.x can fail to open an HNSW segment that another process wrote but
+        # hasn't flushed yet ("Nothing found on disk"). Course collections are small,
+        # so fall back to an exact cosine search over the stored embeddings.
+        logger.warning(f"HNSW query failed for course {course_id} ({exc}); using exact search.")
+        return _exact_search(collection, query_embedding, top_k)
+
     formatted = []
     if not results or not results["ids"] or not results["ids"][0]:
         return formatted
-        
+
     ids = results["ids"][0]
     documents = results["documents"][0]
     metadatas = results["metadatas"][0]
     distances = results["distances"][0]
-    
+
     for i in range(len(ids)):
         formatted.append({
             "id": ids[i],
@@ -138,8 +147,30 @@ def search_relevant_chunks(
             "metadata": metadatas[i],
             "distance": float(distances[i])
         })
-        
+
     return formatted
+
+
+def _exact_search(collection, query_embedding: list[float], top_k: int) -> list[dict]:
+    import numpy as np
+
+    data = collection.get(include=["embeddings", "documents", "metadatas"])
+    if not data["ids"]:
+        return []
+    matrix = np.asarray(data["embeddings"], dtype=np.float32)
+    q = np.asarray(query_embedding, dtype=np.float32)
+    norms = np.linalg.norm(matrix, axis=1) * (np.linalg.norm(q) or 1.0)
+    sims = matrix @ q / np.where(norms == 0, 1.0, norms)
+    order = np.argsort(-sims)[:top_k]
+    return [
+        {
+            "id": data["ids"][i],
+            "content": data["documents"][i],
+            "metadata": data["metadatas"][i],
+            "distance": float(1.0 - sims[i]),
+        }
+        for i in order
+    ]
 
 
 def reindex_document_chunks(
@@ -161,3 +192,32 @@ def reindex_document_chunks(
     delete_document_chunks(course_id, document_id)
     upsert_document_chunks(course_id, document_id, chunks, embeddings)
 
+
+
+def search_courses(course_ids: list[str], query_embedding: list[float], top_k: int = 6) -> list[dict]:
+    """Search several course collections and merge the results by similarity."""
+    merged: list[dict] = []
+    for cid in course_ids:
+        for attempt in (1, 2):
+            try:
+                merged.extend(search_relevant_chunks(str(cid), query_embedding, top_k=top_k))
+                break
+            except Exception as exc:
+                logger.warning(f"Vector search failed for course {cid} (attempt {attempt}): {exc}")
+    merged.sort(key=lambda c: c["distance"])
+    return merged
+
+
+def collection_stats() -> dict:
+    """Totals across every course collection (used by the health endpoint)."""
+    client = get_chroma_client()
+    prefix = f"{settings.CHROMA_COLLECTION_PREFIX}_course_"
+    names = [getattr(c, "name", str(c)) for c in client.list_collections()]
+    names = [n for n in names if n.startswith(prefix)]
+    total = 0
+    for n in names:
+        try:
+            total += client.get_collection(n).count()
+        except Exception:
+            pass
+    return {"collections": len(names), "vectors": total}

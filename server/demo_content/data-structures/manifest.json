@@ -1,0 +1,135 @@
+{
+  "code": "CS-201",
+  "title": "Data Structures and Algorithms",
+  "subject": "core-cs",
+  "teacher": "ananya.rao",
+  "description": "A core course on the design and analysis of fundamental data structures and algorithms, from arrays and linked lists through trees, heaps and hash tables to sorting and graph algorithms. Emphasis is placed on asymptotic analysis, correctness arguments and choosing the right structure for a workload.",
+  "units": [
+    {
+      "slug": "01-linear-structures",
+      "title": "Unit 1 · Linear Data Structures",
+      "description": "Contiguous and linked sequence representations and the stack, queue and deque abstract data types built on them.",
+      "topics": [
+        {
+          "slug": "01-arrays-and-linked-lists",
+          "title": "Arrays and Linked Lists",
+          "description": "Static and dynamic arrays, amortized analysis of doubling, and singly, doubly and circular linked lists.",
+          "documents": [
+            {
+              "file": "arrays-and-linked-lists-notes.md",
+              "title": "Arrays and Linked Lists — Lecture Notes",
+              "description": "Static vs dynamic arrays, amortized O(1) append by doubling, linked list variants and an operation complexity table.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            }
+          ]
+        },
+        {
+          "slug": "02-stacks-and-queues",
+          "title": "Stacks and Queues",
+          "description": "LIFO and FIFO structures, circular queues, deques, an introduction to priority queues, and classic stack and queue applications.",
+          "documents": [
+            {
+              "file": "stacks-and-queues-notes.md",
+              "title": "Stacks and Queues — Lecture Notes",
+              "description": "Array and linked implementations, circular queue conditions, balanced parentheses and a worked infix-to-postfix conversion.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "02-trees-and-heaps",
+      "title": "Unit 2 · Trees, Heaps and Hashing",
+      "description": "Hierarchical structures for ordered data, heap-based priority queues, and hash tables for constant expected-time lookup.",
+      "topics": [
+        {
+          "slug": "01-binary-trees-and-bst",
+          "title": "Binary Trees and Binary Search Trees",
+          "description": "Tree terminology, traversals, BST operations and deletion cases, and AVL balancing with rotations.",
+          "documents": [
+            {
+              "file": "binary-trees-and-bst-notes.md",
+              "title": "Binary Trees, BSTs and AVL Trees — Lecture Notes",
+              "description": "Traversal orders with a worked example, BST insert/search/delete, O(h) analysis and the four AVL rotation cases.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            }
+          ]
+        },
+        {
+          "slug": "02-heaps-and-hashing",
+          "title": "Heaps, Priority Queues and Hashing",
+          "description": "Binary heaps in arrays, linear-time build-heap, heapsort, and hash tables with chaining and open addressing.",
+          "documents": [
+            {
+              "file": "heaps-and-priority-queues-notes.md",
+              "title": "Heaps and Priority Queues — Lecture Notes",
+              "description": "Array index formulas, sift-up and sift-down, the O(n) build-heap proof and heapsort with a traced example.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            },
+            {
+              "file": "hashing-and-hash-tables.md",
+              "title": "Hashing and Hash Tables",
+              "description": "Hash functions, separate chaining, linear and quadratic probing, double hashing, load factor and rehashing.",
+              "format": "docx",
+              "category": "Lecture notes"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "03-algorithm-design-and-graphs",
+      "title": "Unit 3 · Algorithm Design and Graphs",
+      "description": "Asymptotic analysis, recurrences and sorting, followed by graph representations, traversals, shortest paths and minimum spanning trees.",
+      "topics": [
+        {
+          "slug": "01-sorting-and-asymptotic-analysis",
+          "title": "Sorting Algorithms and Asymptotic Analysis",
+          "description": "Big-O, Big-Theta and Big-Omega, the master theorem, comparison sorts and the Omega(n log n) lower bound.",
+          "documents": [
+            {
+              "file": "sorting-algorithms-notes.md",
+              "title": "Sorting Algorithms — Lecture Notes",
+              "description": "Elementary and divide-and-conquer sorts, a best/average/worst/space/stability table, quicksort pivot strategies and the decision-tree lower bound.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            },
+            {
+              "file": "asymptotic-analysis-study-guide.md",
+              "title": "Asymptotic Analysis and Recurrences — Study Guide",
+              "description": "Formal definitions of asymptotic notation, loop analysis patterns and the three cases of the master theorem with standard examples.",
+              "format": "txt",
+              "category": "Study guide"
+            }
+          ]
+        },
+        {
+          "slug": "02-graph-algorithms",
+          "title": "Graph Algorithms",
+          "description": "Adjacency matrices and lists, BFS and DFS, topological sorting, Dijkstra, Bellman-Ford, and Prim and Kruskal MSTs.",
+          "documents": [
+            {
+              "file": "graph-representation-and-traversal-notes.md",
+              "title": "Graph Representation, Traversal and Topological Sort — Lecture Notes",
+              "description": "Matrix vs list trade-offs, BFS and DFS with edge classification, and Kahn's algorithm with a worked example.",
+              "format": "pdf",
+              "category": "Lecture notes"
+            },
+            {
+              "file": "shortest-paths-and-mst-worked-examples.md",
+              "title": "Shortest Paths and Minimum Spanning Trees — Worked Examples",
+              "description": "Traced runs of Dijkstra, Bellman-Ford, Kruskal and Prim, plus union-find with path compression and union by rank.",
+              "format": "docx",
+              "category": "Worked examples"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

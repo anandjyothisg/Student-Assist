@@ -1,86 +1,62 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 
-export function Card({ children, className = '', interactive = false, onClick, style = {}, ...props }) {
-  const baseStyle = {
-    borderRadius: '6px',
-    background: 'var(--bg-surface)',
-    border: '1px solid var(--border)',
-    overflow: 'hidden',
-    transition: 'all 0.15s ease-out',
-    ...style,
-  };
-
-  if (interactive) {
-    return (
-      <motion.div
-        whileHover={{ y: -1, scale: 1.005 }}
-        whileTap={{ scale: 0.99 }}
-        onClick={onClick}
-        className={`cursor-pointer ${className}`}
-        style={baseStyle}
-        {...props}
-      >
-        {children}
-      </motion.div>
-    );
-  }
-
+/**
+ * Card — a quiet surface. Border + surface colour; elevation is reserved for overlays.
+ * `interactive` adds hover/press feedback and renders a <button> when `onClick` is provided.
+ */
+export function Card({ as, children, className = '', interactive = false, padded = true, onClick, ...props }) {
+  const Tag = as || (interactive && onClick ? 'button' : 'div');
   return (
-    <div className={className} onClick={onClick} style={baseStyle} {...props}>
-      {children}
-    </div>
-  );
-}
-
-export function CardHeader({ children, className = '', ...props }) {
-  return (
-    <div className={`p-5 flex flex-col gap-1.5 ${className}`} style={{ borderBottom: '1px solid var(--border)' }} {...props}>
-      {children}
-    </div>
-  );
-}
-
-export function CardTitle({ children, className = '', ...props }) {
-  return (
-    <h3
-      className={`font-sans font-semibold tracking-tight ${className}`}
-      style={{ fontSize: '13px', color: 'var(--fg)' }}
+    <Tag
+      onClick={onClick}
+      type={Tag === 'button' ? 'button' : undefined}
+      className={[
+        'rounded-lg border border-border bg-surface text-left',
+        padded ? 'p-5' : '',
+        interactive
+          ? 'transition-[border-color,background-color,box-shadow] duration-150 hover:border-border-strong hover:shadow-sm focus-visible:outline-2 focus-visible:outline-accent'
+          : '',
+        className,
+      ].join(' ')}
       {...props}
     >
       {children}
-    </h3>
+    </Tag>
   );
 }
 
-export function CardDescription({ children, className = '', ...props }) {
+export function CardHeader({ title, description, icon: Icon, actions, className = '', children }) {
   return (
-    <p
-      className={`font-sans leading-relaxed ${className}`}
-      style={{ fontSize: '11px', color: 'var(--fg-3)' }}
-      {...props}
-    >
-      {children}
-    </p>
-  );
-}
-
-export function CardContent({ children, className = '', ...props }) {
-  return (
-    <div className={`p-5 font-sans ${className}`} style={{ fontSize: '13px' }} {...props}>
-      {children}
+    <div className={`flex items-start justify-between gap-4 ${className}`}>
+      <div className="flex min-w-0 items-start gap-3">
+        {Icon && (
+          <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-subtle text-fg-2">
+            <Icon className="size-4" aria-hidden />
+          </span>
+        )}
+        <div className="min-w-0">
+          {title && <h3 className="text-sm font-semibold text-fg">{title}</h3>}
+          {description && <p className="mt-0.5 text-[13px] text-fg-3">{description}</p>}
+          {children}
+        </div>
+      </div>
+      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>
   );
 }
 
-export function CardFooter({ children, className = '', ...props }) {
-  return (
-    <div
-      className={`p-5 pt-4 flex items-center ${className}`}
-      style={{ borderTop: '1px solid var(--border)' }}
-      {...props}
-    >
-      {children}
-    </div>
-  );
+export function CardTitle({ children, className = '' }) {
+  return <h3 className={`text-sm font-semibold text-fg ${className}`}>{children}</h3>;
+}
+
+export function CardDescription({ children, className = '' }) {
+  return <p className={`text-[13px] text-fg-3 ${className}`}>{children}</p>;
+}
+
+export function CardContent({ children, className = '' }) {
+  return <div className={className}>{children}</div>;
+}
+
+export function CardFooter({ children, className = '' }) {
+  return <div className={`mt-4 flex items-center gap-2 border-t border-border pt-4 ${className}`}>{children}</div>;
 }

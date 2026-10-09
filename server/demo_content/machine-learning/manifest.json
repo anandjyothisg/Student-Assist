@@ -1,0 +1,80 @@
+{
+  "code": "ML-302",
+  "title": "Machine Learning",
+  "subject": "ai-ds",
+  "teacher": "daniel.reyes",
+  "description": "Core supervised and unsupervised learning methods, model evaluation and generalisation, and an introduction to neural networks, with emphasis on the mathematics behind each algorithm.",
+  "units": [
+    {
+      "slug": "01-supervised-learning",
+      "title": "Unit 1 · Supervised Learning",
+      "description": "Regression and classification with linear models, decision trees and ensemble methods.",
+      "topics": [
+        {
+          "slug": "01-linear-and-logistic-regression",
+          "title": "Linear and Logistic Regression",
+          "description": "Ordinary least squares, the normal equation, gradient descent and logistic regression for binary classification.",
+          "documents": [
+            {"file": "linear-logistic-regression-lecture-notes.md", "title": "Linear and Logistic Regression — Lecture Notes", "description": "OLS, MSE cost, the normal equation, gradient descent, the sigmoid function, log-loss and decision boundaries.", "format": "pdf", "category": "Lecture notes"},
+            {"file": "gradient-descent-worked-example.md", "title": "Gradient Descent Worked Example", "description": "Three iterations of batch gradient descent computed by hand, checked against the normal equation, with a learning-rate stability analysis.", "format": "docx", "category": "Worked examples"}
+          ]
+        },
+        {
+          "slug": "02-decision-trees-and-ensembles",
+          "title": "Decision Trees and Ensemble Methods",
+          "description": "Entropy, information gain and Gini impurity, ID3/C4.5/CART, pruning, bagging, random forests and boosting.",
+          "documents": [
+            {"file": "decision-trees-ensembles-lecture-notes.md", "title": "Decision Trees and Ensemble Methods — Lecture Notes", "description": "Split criteria with a worked information-gain calculation, tree pruning, bagging, random forests, AdaBoost and gradient boosting.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "02-model-evaluation-and-generalization",
+      "title": "Unit 2 · Model Evaluation and Generalization",
+      "description": "Why models fail to generalise, how regularisation helps, and how to measure performance reliably.",
+      "topics": [
+        {
+          "slug": "01-bias-variance-and-regularization",
+          "title": "Bias–Variance Trade-off and Regularization",
+          "description": "Underfitting and overfitting, the bias-variance decomposition, L1 and L2 regularisation, early stopping and dropout.",
+          "documents": [
+            {"file": "bias-variance-regularization-notes.md", "title": "Bias–Variance Trade-off and Regularization — Lecture Notes", "description": "The bias-variance decomposition, diagnosing fit with learning curves, ridge versus lasso, the effect of lambda, early stopping and dropout.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        },
+        {
+          "slug": "02-evaluation-metrics-and-cross-validation",
+          "title": "Evaluation Metrics and Cross-Validation",
+          "description": "Classification metrics from the confusion matrix, ROC and AUC, data splitting, k-fold cross-validation and data leakage.",
+          "documents": [
+            {"file": "evaluation-metrics-lecture-notes.md", "title": "Classification Evaluation Metrics — Lecture Notes", "description": "Confusion matrix, accuracy, precision, recall, F1 with a numeric worked example, ROC curves, AUC and regression metrics.", "format": "pdf", "category": "Lecture notes"},
+            {"file": "cross-validation-lab-handout.md", "title": "Cross-Validation and Data Leakage — Lab Handout", "description": "Train/validation/test splits, k-fold, stratified and nested cross-validation, and how to avoid data leakage with pipelines.", "format": "txt", "category": "Lab handout"}
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "03-unsupervised-learning-and-neural-networks",
+      "title": "Unit 3 · Unsupervised Learning and Neural Networks",
+      "description": "Finding structure in unlabelled data, and the fundamentals of training multilayer neural networks.",
+      "topics": [
+        {
+          "slug": "01-clustering-and-dimensionality-reduction",
+          "title": "Clustering and Dimensionality Reduction",
+          "description": "k-means, choosing k, hierarchical clustering, DBSCAN and principal component analysis.",
+          "documents": [
+            {"file": "clustering-and-pca-lecture-notes.md", "title": "Clustering and Dimensionality Reduction — Lecture Notes", "description": "The k-means objective and algorithm with a worked example, elbow and silhouette methods, linkage criteria, DBSCAN and PCA.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        },
+        {
+          "slug": "02-neural-network-fundamentals",
+          "title": "Neural Network Fundamentals",
+          "description": "Perceptrons, multilayer networks, activation functions, backpropagation, softmax with cross-entropy and optimisers.",
+          "documents": [
+            {"file": "neural-network-fundamentals-lecture-notes.md", "title": "Neural Network Fundamentals — Lecture Notes", "description": "Perceptron learning, MLPs, activation functions, backpropagation with a numeric example, vanishing gradients, softmax and SGD, momentum and Adam.", "format": "docx", "category": "Lecture notes"}
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -3,6 +3,9 @@ SmartStudent AI — Document Text Extraction Service
 """
 
 import logging
+import re
+import unicodedata
+
 import fitz  # PyMuPDF
 import docx
 import pptx
@@ -24,18 +27,25 @@ def extract_text_by_page(file_path: str, file_type: str) -> list[dict]:
     logger.info(f"Extracting text from {file_path} of type {file_type}")
     
     file_type = file_type.lower()
-    
-    if file_type == "pdf":
-        return _extract_pdf(file_path)
-    elif file_type == "docx":
-        return _extract_docx(file_path)
-    elif file_type == "pptx":
-        return _extract_pptx(file_path)
-    elif file_type == "txt":
-        return _extract_txt(file_path)
-    else:
+    extractors = {"pdf": _extract_pdf, "docx": _extract_docx, "pptx": _extract_pptx, "txt": _extract_txt}
+    if file_type not in extractors:
         logger.error(f"Unsupported file type: {file_type}")
         raise ValueError(f"Unsupported file type: {file_type}")
+    pages = extractors[file_type](file_path)
+    for p in pages:
+        p["text"] = normalize_text(p.get("text") or "")
+    return pages
+
+
+def normalize_text(text: str) -> str:
+    """
+    NFKC folds typographic ligatures (ﬁ, ﬂ) and other compatibility characters
+    that PDF typesetting introduces, so "overﬁtting" is indexed as "overfitting".
+    Also trims trailing whitespace on lines.
+    """
+    text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    return text.strip()
 
 
 def _extract_pdf(file_path: str) -> list[dict]:

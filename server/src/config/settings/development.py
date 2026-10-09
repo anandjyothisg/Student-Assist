@@ -35,6 +35,18 @@ CORS_ALLOW_ALL_ORIGINS = True
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # ---------------------------------------------------------------------------
+# Cache — In-memory in dev/test, so login/register/password-reset (which
+# use DRF throttling) don't hard-depend on a running Redis server locally.
+# Production keeps the Redis-backed cache from base.py.
+# ---------------------------------------------------------------------------
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }
+}
+
+# ---------------------------------------------------------------------------
 # DRF — Allow browsable API in dev
 # ---------------------------------------------------------------------------
 
@@ -49,3 +61,12 @@ REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] = [  # noqa: F405
 
 LOGGING["loggers"]["apps"]["level"] = "DEBUG"  # noqa: F405
 LOGGING["loggers"]["django"]["level"] = "DEBUG"  # noqa: F405
+# SQL statements are very noisy at DEBUG; opt in with SQL_LOG=1.
+LOGGING["loggers"]["django.db.backends"] = {  # noqa: F405
+    "handlers": ["console"],
+    "level": "DEBUG" if os.environ.get("SQL_LOG") == "1" else "INFO",
+    "propagate": False,
+}
+# Third-party chatter that drowns out application logs.
+for _name in ("chromadb", "httpx", "httpcore", "urllib3", "sentence_transformers"):
+    LOGGING["loggers"][_name] = {"handlers": ["console"], "level": "WARNING", "propagate": False}  # noqa: F405

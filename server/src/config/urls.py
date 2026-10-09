@@ -11,6 +11,7 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
     SpectacularRedocView,
 )
+from apps.chat.views import AiHealthView, AiInsightsView, AiScopeView
 from apps.assistant.views import DocumentSummarizeView, QuizGenerateView, FlashcardGenerateView, VivaGenerateView, ConceptExtractView, GlossaryGenerateView, LearningAnalyticsView, AiAskView
 
 # ---------------------------------------------------------------------------
@@ -28,6 +29,9 @@ admin.site.index_title = "Dashboard"
 api_v1_urlpatterns = [
     # Universal AI query endpoint
     path("ai/ask/", AiAskView.as_view(), name="ai-ask"),
+    path("ai/health/", AiHealthView.as_view(), name="ai-health"),
+    path("ai/scope/", AiScopeView.as_view(), name="ai-scope"),
+    path("ai/insights/", AiInsightsView.as_view(), name="ai-insights"),
 
     # Authentication (register, login, logout, token refresh, me, password change)
     path("auth/", include("apps.accounts.auth_urls", namespace="auth")),
@@ -103,5 +107,16 @@ urlpatterns = [
 # ---------------------------------------------------------------------------
 
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # Only public media (avatars, course thumbnails) is served directly.
+    # Course documents are private and go through /api/v1/documents/{id}/download/.
+    from django.urls import re_path
+    from django.views.static import serve as serve_media
+
+    urlpatterns += [
+        re_path(
+            r"^media/(?P<path>(?:avatars|course_thumbnails)/.+)$",
+            serve_media,
+            {"document_root": settings.MEDIA_ROOT},
+        ),
+    ]
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

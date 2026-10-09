@@ -1,0 +1,80 @@
+{
+  "code": "CS-304",
+  "title": "Operating Systems",
+  "subject": "core-cs",
+  "teacher": "ravi.menon",
+  "description": "Core principles of operating system design: process and thread management, CPU scheduling, synchronization, deadlocks, and memory management with virtual memory. Each unit pairs lecture notes with fully worked numerical examples of the kind set in examinations.",
+  "units": [
+    {
+      "slug": "01-processes-scheduling",
+      "title": "Unit 1 · Processes and CPU Scheduling",
+      "description": "The process abstraction, threads, interprocess communication and CPU scheduling algorithms.",
+      "topics": [
+        {
+          "slug": "01-processes-threads",
+          "title": "Processes and Threads",
+          "description": "Process states, the PCB, context switching, fork and exec, threading models and IPC mechanisms.",
+          "documents": [
+            {"file": "processes-and-threads-notes.md", "title": "Processes and Threads — Lecture Notes", "description": "Process states, PCB contents, a fork/exec example in C, user versus kernel threads, multithreading models, and pipes, shared memory and message passing.", "format": "pdf", "category": "Lecture notes"}
+          ]
+        },
+        {
+          "slug": "02-cpu-scheduling",
+          "title": "CPU Scheduling Algorithms",
+          "description": "Scheduling criteria, FCFS, SJF, SRTF, priority, round robin and multilevel feedback queues.",
+          "documents": [
+            {"file": "cpu-scheduling-notes.md", "title": "CPU Scheduling Algorithms — Lecture Notes", "description": "Scheduling criteria, each major algorithm with its trade-offs, the convoy effect, starvation and aging, and multilevel feedback queues.", "format": "pdf", "category": "Lecture notes"},
+            {"file": "scheduling-worked-example.md", "title": "CPU Scheduling — Worked Gantt-Chart Example", "description": "Gantt charts with waiting, turnaround and response times for FCFS, SJF, SRTF and Round Robin on one four-process workload.", "format": "docx", "category": "Worked examples"}
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "02-synchronization-deadlocks",
+      "title": "Unit 2 · Synchronization and Deadlocks",
+      "description": "Coordinating concurrent processes safely and preventing, avoiding or detecting deadlock.",
+      "topics": [
+        {
+          "slug": "01-process-synchronization",
+          "title": "Process Synchronization",
+          "description": "Race conditions, the critical-section problem, Peterson's solution, mutexes, semaphores, monitors and classic problems.",
+          "documents": [
+            {"file": "synchronization-notes.md", "title": "Process Synchronization — Lecture Notes", "description": "Race conditions, the three critical-section requirements, Peterson's algorithm, hardware primitives, mutexes, semaphores and monitors.", "format": "pdf", "category": "Lecture notes"},
+            {"file": "classic-synchronization-problems.md", "title": "Classic Synchronization Problems — Study Guide", "description": "Semaphore solutions and pitfalls for the bounded-buffer, readers-writers and dining-philosophers problems.", "format": "txt", "category": "Study guide"}
+          ]
+        },
+        {
+          "slug": "02-deadlocks",
+          "title": "Deadlocks",
+          "description": "Coffman conditions, resource-allocation graphs, prevention, avoidance, detection and recovery.",
+          "documents": [
+            {"file": "deadlocks-notes.md", "title": "Deadlocks — Lecture Notes", "description": "The four necessary conditions, resource-allocation graphs, safe states, and prevention versus avoidance versus detection.", "format": "pdf", "category": "Lecture notes"},
+            {"file": "bankers-algorithm-worked-example.md", "title": "Banker's Algorithm — Fully Worked Example", "description": "Need matrix, a step-by-step safe-sequence derivation, and three resource requests that are granted, delayed and denied.", "format": "docx", "category": "Worked examples"}
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "03-memory-storage",
+      "title": "Unit 3 · Memory and Storage Management",
+      "description": "Physical and virtual memory management, and file systems.",
+      "topics": [
+        {
+          "slug": "01-memory-virtual-memory",
+          "title": "Memory Management and Virtual Memory",
+          "description": "Contiguous allocation, fragmentation, paging, TLBs, segmentation, demand paging, page replacement and thrashing.",
+          "documents": [
+            {"file": "memory-management-notes.md", "title": "Memory Management: Allocation, Paging and Segmentation — Lecture Notes", "description": "Fit strategies, fragmentation, address translation, page-table sizing, TLB effective access time and segmentation.", "format": "pdf", "category": "Lecture notes"},
+            {"file": "virtual-memory-and-page-replacement.md", "title": "Virtual Memory and Page Replacement — Worked Examples", "description": "Demand paging and page-fault cost, FIFO, Optimal and LRU traces on one reference string, Belady's anomaly, and the working-set model.", "format": "txt", "category": "Worked examples"}
+          ]
+        },
+        {
+          "slug": "02-file-systems",
+          "title": "File Systems",
+          "description": "Materials for this topic will be published later in the term.",
+          "documents": []
+        }
+      ]
+    }
+  ]
+}
