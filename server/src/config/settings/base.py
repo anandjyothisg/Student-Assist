@@ -79,6 +79,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # ---------------------------------------------------------------------------
 
 MIDDLEWARE = [
+    "apps.core.middleware.RequestIdMiddleware",  # first: every log line carries the request id
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",  # Must be before CommonMiddleware
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -153,7 +154,7 @@ STATIC_URL = "/static/"
 STATIC_ROOT = SERVER_DIR / "static"
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = SERVER_DIR / "media"
+MEDIA_ROOT = Path(os.environ["MEDIA_ROOT"]) if os.environ.get("MEDIA_ROOT") else SERVER_DIR / "media"
 
 # ---------------------------------------------------------------------------
 # Default Primary Key
@@ -313,11 +314,17 @@ CACHES = {
 # ---------------------------------------------------------------------------
 
 # Ollama
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+# 127.0.0.1, not localhost: Ollama listens on IPv4 only and "localhost" tries ::1 first
+# (a ~2 s stall per new connection on Windows).
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_LLM_MODEL = os.environ.get("OLLAMA_LLM_MODEL", "llama3.2")
 OLLAMA_EMBEDDING_MODEL = os.environ.get("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
 OLLAMA_CONNECT_TIMEOUT = float(os.environ.get("OLLAMA_CONNECT_TIMEOUT", "5"))
 OLLAMA_READ_TIMEOUT = float(os.environ.get("OLLAMA_READ_TIMEOUT", "180"))
+# Hard ceiling on writing one streamed answer, however slowly tokens arrive.
+OLLAMA_ANSWER_DEADLINE = float(os.environ.get("OLLAMA_ANSWER_DEADLINE", "240"))
+# Minutes after which a document stuck in "processing" is treated as interrupted.
+DOCUMENT_STALE_MINUTES = int(os.environ.get("DOCUMENT_STALE_MINUTES", "20"))
 OLLAMA_KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "2h")
 OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
 
@@ -352,7 +359,7 @@ EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5_242_880
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2_621_440
 
-ALLOWED_DOCUMENT_EXTENSIONS = [".pdf", ".docx", ".pptx", ".txt"]
+ALLOWED_DOCUMENT_EXTENSIONS = [".pdf", ".docx", ".pptx", ".txt", ".md"]
 MAX_DOCUMENT_SIZE_MB = int(os.environ.get("MAX_DOCUMENT_SIZE_MB", "50"))
 
 # ---------------------------------------------------------------------------
@@ -367,7 +374,7 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "verbose": {
-            "format": "[{asctime}] [{levelname}] [{name}] {message}",
+            "format": "[{asctime}] [{levelname}] [{name}] [req {request_id}] {message}",
             "style": "{",
             "datefmt": "%Y-%m-%d %H:%M:%S",
         },
@@ -376,12 +383,17 @@ LOGGING = {
             "style": "{",
         },
     },
+    "filters": {
+        "request_id": {"()": "apps.core.middleware.RequestIdFilter"},
+    },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "simple",
+            "filters": ["request_id"],
         },
         "file_general": {
+            "filters": ["request_id"],
             "class": "logging.handlers.TimedRotatingFileHandler",
             "filename": LOG_DIR / "general.log",
             "when": "midnight",
@@ -390,6 +402,7 @@ LOGGING = {
             "delay": True,
         },
         "file_errors": {
+            "filters": ["request_id"],
             "class": "logging.handlers.TimedRotatingFileHandler",
             "filename": LOG_DIR / "errors.log",
             "when": "midnight",
@@ -399,6 +412,7 @@ LOGGING = {
             "level": "ERROR",
         },
         "file_celery": {
+            "filters": ["request_id"],
             "class": "logging.handlers.TimedRotatingFileHandler",
             "filename": LOG_DIR / "celery.log",
             "when": "midnight",

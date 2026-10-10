@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BookOpen, Bookmark, Check, ChevronDown, Copy, Layers, MessageCircle, RotateCw, Search, Trash2 } from 'lucide-react';
+import { readRoute } from '../layout/navConfig';
 import api, { chatApi, extractErrorMessage } from '../auth/api';
 import { useToast } from '../ui/Toast';
 import { PageHeader } from '../ui/PageHeader';
@@ -108,7 +109,8 @@ function Flashcard({ card, flipped, onFlip }) {
 
 export function Notebook({ onNavigate }) {
   const toast = useToast();
-  const [tab, setTab] = useState('answers');
+  // Home's "Flashcards" shortcut opens this page on the flashcards tab (#/notebook?tab=flashcards).
+  const [tab, setTab] = useState(() => (readRoute().params.tab === 'flashcards' ? 'flashcards' : 'answers'));
   const [answers, setAnswers] = useState([]);
   const [decks, setDecks] = useState([]);
   const [state, setState] = useState('loading');
@@ -167,7 +169,7 @@ export function Notebook({ onNavigate }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Notebook" description="Answers you saved from Ask and flashcard decks made from your course materials — synced to your account." />
+      <PageHeader title="Notebook" description="Answers you saved from the AI Assistant, and flashcards made from your study materials." />
 
       <div className="flex flex-col gap-3 border-b border-border sm:flex-row sm:items-end sm:justify-between">
         <div role="tablist" aria-label="Notebook sections" className="-mb-px flex gap-5">
@@ -205,7 +207,7 @@ export function Notebook({ onNavigate }) {
         )
       ) : decks.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border-strong">
-          <EmptyState icon={Layers} title="No flashcards yet" description="Open a document in Sources and choose “Make flashcards” to turn it into a revision deck." action={<Button iconLeft={BookOpen} onClick={() => onNavigate?.('documents')}>Open Sources</Button>} />
+          <EmptyState icon={Layers} title="No flashcards yet" description="Open a file in Study Materials and choose “Make flashcards” to turn it into a revision deck." action={<Button iconLeft={BookOpen} onClick={() => onNavigate?.('documents')}>Open Study Materials</Button>} />
         </div>
       ) : visibleDecks.length === 0 ? (
         <EmptyState compact icon={Search} title="No matches" description={`No flashcards mention “${query}”.`} />

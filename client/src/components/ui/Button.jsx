@@ -28,8 +28,8 @@ const buttonVariants = {
 
 const buttonSizes = {
   xs: 'h-7 px-2.5 text-xs gap-1.5 rounded-sm',
-  sm: 'h-8 px-3 text-[13px] gap-1.5 rounded-md',
-  md: 'h-9 px-3.5 text-[13px] gap-2 rounded-md',
+  sm: 'h-8 pointer-coarse:h-10 px-3 text-[13px] gap-1.5 rounded-md',
+  md: 'h-9 pointer-coarse:h-10 px-3.5 text-[13px] gap-2 rounded-md',
   lg: 'h-11 px-5 text-sm gap-2 rounded-md',
   xl: 'h-12 px-6 text-[15px] gap-2.5 rounded-lg',
 };
@@ -80,8 +80,8 @@ export const Button = forwardRef(function Button(
 });
 
 const iconButtonSizes = {
-  sm: 'size-8 rounded-md [&>svg]:size-4',
-  md: 'size-9 rounded-md [&>svg]:size-[18px]',
+  sm: 'size-8 pointer-coarse:size-10 rounded-md [&>svg]:size-4',
+  md: 'size-9 pointer-coarse:size-10 rounded-md [&>svg]:size-[18px]',
   lg: 'size-11 rounded-lg [&>svg]:size-5',
 };
 

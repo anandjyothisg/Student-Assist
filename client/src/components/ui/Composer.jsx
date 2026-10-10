@@ -3,10 +3,11 @@ import { ArrowUp, Square } from 'lucide-react';
 
 /**
  * Composer — auto-growing prompt box with a send button.
- * Enter sends, Shift+Enter inserts a newline.
+ * Enter sends, Shift+Enter inserts a newline. While an answer is being written
+ * the button becomes a real Stop button when `onStop` is given.
  */
 export const Composer = forwardRef(function Composer(
-  { value, onChange, onSubmit, loading = false, placeholder = 'Ask a question…', maxRows = 8, minRows = 1, size = 'md', footer, autoFocus = false, label = 'Message' },
+  { value, onChange, onSubmit, onStop, loading = false, placeholder = 'Ask a question…', maxRows = 8, minRows = 1, size = 'md', footer, autoFocus = false, label = 'Message' },
   ref,
 ) {
   const taRef = useRef(null);
@@ -23,6 +24,7 @@ export const Composer = forwardRef(function Composer(
   useEffect(() => { if (autoFocus) taRef.current?.focus({ preventScroll: true }); }, [autoFocus]);
 
   const canSend = value.trim().length > 0 && !loading;
+  const canStop = loading && !!onStop;
   const submit = (e) => { e?.preventDefault(); if (canSend) onSubmit(); };
 
   return (
@@ -50,17 +52,19 @@ export const Composer = forwardRef(function Composer(
           ].join(' ')}
         />
         <button
-          type="submit"
-          disabled={!canSend}
-          aria-label={loading ? 'Waiting for answer' : 'Send'}
+          type={canStop ? 'button' : 'submit'}
+          onClick={canStop ? onStop : undefined}
+          disabled={!canSend && !canStop}
+          aria-label={canStop ? 'Stop answering' : 'Send'}
+          title={canStop ? 'Stop' : 'Send'}
           className={[
             'mb-0.5 inline-flex shrink-0 items-center justify-center rounded-lg transition-[background-color,opacity,transform] active:translate-y-px',
-            size === 'lg' ? 'size-9' : 'size-8',
-            canSend ? 'bg-fg text-canvas hover:bg-fg/85' : 'bg-subtle text-fg-3',
+            'size-10',
+            canSend || canStop ? 'bg-fg text-canvas hover:bg-fg/85' : 'bg-subtle text-fg-3',
             'disabled:cursor-not-allowed',
           ].join(' ')}
         >
-          {loading ? <Square className="size-3 fill-current" aria-hidden /> : <ArrowUp className="size-4" strokeWidth={2.25} aria-hidden />}
+          {canStop ? <Square className="size-3.5 fill-current" aria-hidden /> : <ArrowUp className="size-4" strokeWidth={2.25} aria-hidden />}
         </button>
       </div>
       {footer && <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2 text-xs text-fg-3">{footer}</div>}

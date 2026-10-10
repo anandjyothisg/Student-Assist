@@ -94,7 +94,7 @@ export function AdminCatalog() {
   return (
     <div className="flex flex-col gap-10">
       <PageHeader
-        title="Catalog"
+        title="Courses"
         description="Subjects, the courses filed under them, who teaches each course, and whether students can see it."
         actions={<Button iconLeft={Plus} onClick={() => setDialog({})}>New subject</Button>}
       />
@@ -179,7 +179,7 @@ export function AdminCatalog() {
                         >
                           {c.is_published ? 'Unpublish' : 'Publish'}
                         </Button>
-                        <Badge tone={c.is_published ? 'success' : 'neutral'} dot className="w-24 justify-center">{c.is_published ? 'Live' : 'Draft'}</Badge>
+                        <Badge tone={c.is_published ? 'success' : 'neutral'} dot className="w-24 justify-center">{c.is_published ? 'Published' : 'Draft'}</Badge>
                       </div>
                     </li>
                   ))}

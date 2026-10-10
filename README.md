@@ -25,6 +25,8 @@ The script starts Ollama, applies migrations, seeds the demo environment if need
 
 Other seeded staff sign in with `AuraFaculty#2026` and other students with `AuraLearner#2026` (see **Users** as admin).
 
+> These are **demo-only** credentials. `seed_demo` refuses to run unless the app is a local development/demo instance (`DEBUG` on, `DJANGO_ENV=development`), so they can't be created on a production database. Override them with `DEMO_*_PASSWORD` variables if you share a demo.
+
 ## Manual setup (any OS)
 
 Prerequisites: Python 3.12, Node 20+, Ollama.
@@ -92,9 +94,35 @@ python manage.py index_documents [--all]            # (re)index pending/failed o
 
 These rules are enforced by the API (see `server/src/apps/core/tests/test_demo_permissions.py`), not just by the UI.
 
-## Tests
+## Tests and checks
 
 ```bash
-cd server && .venv/Scripts/python -m pytest          # API, auth and permission tests
+cd server/src && ../.venv/Scripts/python -m pytest      # 80+ tests: permissions, security regressions, RAG guards,
+                                                        # ingestion/version lifecycle, query budgets
+cd server/src && ../.venv/Scripts/python manage.py rag_eval [--llm]   # assistant evaluation with fixed thresholds
 cd client && npm run lint && npm run build
 ```
+
+End-to-end suites (need the API on :8000 and the web app running; set `E2E_APP` if it isn't on :5173):
+
+```bash
+cd client
+npm run e2e:routing        # landing ↔ auth ↔ app routing, desktop and phone
+npm run e2e:acceptance     # role journeys across student, teacher and admin
+node e2e/document-lifecycle.cjs   # upload → ready → answer → new version → delete, bad uploads
+node e2e/permission-probes.cjs    # live authorization probes
+node e2e/keyboard.cjs             # focus visibility and accessible names
+node e2e/api-latency.cjs          # endpoint timings
+node e2e/landing-perf.cjs 4       # landing page on a 4x throttled CPU
+npm run e2e:landing        # landing screenshots, 6 widths × 2 themes
+npm run e2e:screens        # every role screen, 6 widths × 2 themes
+```
+
+## Operations
+
+- **Deployment:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Covers the single-server topology, production settings, health checks and upgrade steps.
+- **Backup and restore:** [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md). Uses `manage.py backup_data`; a round trip has been verified.
+- **Assistant evaluation:** [docs/EVALUATION.md](docs/EVALUATION.md). Covers the dataset, method, thresholds and latest results.
+- **Index maintenance:**
+  - `manage.py index_documents --reconcile` reports drift.
+  - `--rebuild` is required after changing the embedding model.

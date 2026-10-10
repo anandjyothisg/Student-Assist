@@ -285,3 +285,24 @@ def test_health_probes_need_no_auth_and_leak_nothing(world):
     res = c.get("/readyz")
     assert res.status_code == 200
     assert set(res.json()["checks"]) == {"database", "vector_store", "language_model"}
+
+
+def test_expired_access_token_is_rejected(world):
+    from datetime import timedelta
+
+    from rest_framework_simplejwt.tokens import AccessToken
+
+    token = AccessToken.for_user(world["s1"])
+    token.set_exp(lifetime=-timedelta(seconds=1))
+    c = APIClient()
+    c.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    assert c.get("/api/v1/documents/").status_code == 401
+
+
+def test_logout_blacklists_the_refresh_token(world):
+    refresh = RefreshToken.for_user(world["s1"])
+    c = APIClient()
+    c.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+    assert c.post("/api/v1/auth/logout/", {"refresh": str(refresh)}, format="json").status_code in (200, 205)
+    res = APIClient().post("/api/v1/auth/token/refresh/", {"refresh": str(refresh)}, format="json")
+    assert res.status_code == 401

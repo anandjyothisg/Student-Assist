@@ -75,6 +75,7 @@ export const Input = forwardRef(function Input(
             type={inputType}
             {...p}
             {...props}
+            aria-describedby={[p['aria-describedby'], props['aria-describedby']].filter(Boolean).join(' ') || undefined}
             className={[
               'field-control',
               heights[size] ?? '',

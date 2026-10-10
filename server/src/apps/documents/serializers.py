@@ -210,6 +210,7 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
             ".docx": DocumentType.DOCX,
             ".pptx": DocumentType.PPTX,
             ".txt": DocumentType.TXT,
+            ".md": DocumentType.MD,
         }
         if ext not in ext_to_type:
             from apps.core.exceptions import UnsupportedFileTypeError

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../auth/api';
 
 /** Fetch every page of a paginated list endpoint (page_size 100, max 10 pages). */
@@ -22,13 +22,17 @@ export function useAsync(fn, deps = []) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const run = useCallback(fn, deps);
 
+  const seq = useRef(0);
   const reload = useCallback(async () => {
+    const mine = ++seq.current;
     setState('loading');
     try {
-      setData(await run());
+      const result = await run();
+      if (mine !== seq.current) return; // a newer load replaced this one
+      setData(result);
       setState('ready');
     } catch {
-      setState('error');
+      if (mine === seq.current) setState('error');
     }
   }, [run]);
 

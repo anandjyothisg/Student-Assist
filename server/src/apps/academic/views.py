@@ -4,7 +4,7 @@ SmartStudent AI — Academic Views
 
 import logging
 
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -108,9 +108,20 @@ class CourseViewSet(ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        # Counts are annotated here so listing N courses costs one query, not 3N.
         qs = Course.objects.select_related("subject", "teacher").annotate(
-            active_enrollments=Count("enrollments", filter=Q(enrollments__is_active=True), distinct=True)
+            active_enrollments=Count("enrollments", filter=Q(enrollments__is_active=True), distinct=True),
+            unit_total=Count("units", distinct=True),
+            ready_documents=Count(
+                "documents",
+                filter=Q(documents__is_latest=True, documents__processing_status="completed"),
+                distinct=True,
+            ),
         )
+        if user.is_student:
+            qs = qs.annotate(
+                viewer_enrolled=Exists(Enrollment.objects.filter(course=OuterRef("pk"), student=user, is_active=True))
+            )
 
         if user.is_student:
             qs = qs.filter(is_published=True)
@@ -118,7 +129,7 @@ class CourseViewSet(ModelViewSet):
             scope = self.request.query_params.get("scope")
             qs = qs.filter(teacher=user) if scope == "mine" else qs.filter(Q(is_published=True) | Q(teacher=user))
 
-        subject = parse_uuid_param(self.request.query_params.get("subject"), "subject")
+        subject = self.request.query_params.get("subject")  # a subject code such as "AI-DS"
         if subject:
             qs = qs.filter(subject__code__iexact=subject)
         if self.request.query_params.get("enrolled") == "true" and user.is_student:

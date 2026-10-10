@@ -1,0 +1,52 @@
+{"id": "ai-1", "type": "in_scope", "course": "AI-301", "question": "What is the difference between a rational agent and an omniscient agent?", "expected_docs": ["Intelligent Agents and Environments"], "key_facts": ["rational", "expected"]}
+{"id": "ai-2", "type": "in_scope", "course": "AI-301", "question": "How does breadth-first search differ from depth-first search in completeness?", "expected_docs": ["Uninformed Search Strategies"], "key_facts": ["breadth-first", "depth-first", "complete"]}
+{"id": "ai-3", "type": "in_scope", "course": "AI-301", "question": "When is a heuristic admissible?", "expected_docs": ["Informed Search and Heuristics"], "key_facts": ["never overestimates"]}
+{"id": "ai-4", "type": "in_scope", "course": "AI-301", "question": "What does alpha-beta pruning do in minimax?", "expected_docs": ["Adversarial Search"], "key_facts": ["prun", "minimax"]}
+{"id": "ai-5", "type": "in_scope", "course": "AI-301", "question": "How do you convert a sentence to conjunctive normal form?", "expected_docs": ["Resolution, CNF and Chaining", "Propositional and First-Order Logic"], "key_facts": ["cnf"]}
+{"id": "ai-6", "type": "in_scope", "course": "AI-301", "question": "What does a Bayesian network represent?", "expected_docs": ["Probabilistic Reasoning and Bayesian Networks"], "key_facts": ["conditional"]}
+{"id": "ds-1", "type": "in_scope", "course": "CS-201", "question": "What is the time complexity of inserting at the head of a singly linked list?", "expected_docs": ["Arrays and Linked Lists"], "key_facts": ["o(1)"]}
+{"id": "ds-2", "type": "in_scope", "course": "CS-201", "question": "What is the difference between a stack and a queue?", "expected_docs": ["Stacks and Queues"], "key_facts": ["lifo", "fifo"]}
+{"id": "ds-3", "type": "in_scope", "course": "CS-201", "question": "What does the heap property guarantee?", "expected_docs": ["Heaps and Priority Queues"], "key_facts": ["children"]}
+{"id": "ds-4", "type": "in_scope", "course": "CS-201", "question": "How does an AVL tree stay balanced?", "expected_docs": ["Binary Trees, BSTs and AVL Trees"], "key_facts": ["rotation"]}
+{"id": "ds-5", "type": "in_scope", "course": "CS-201", "question": "Why is quicksort O(n^2) in the worst case?", "expected_docs": ["Sorting Algorithms", "Asymptotic Analysis and Recurrences"], "key_facts": ["pivot"]}
+{"id": "ds-6", "type": "in_scope", "course": "CS-201", "question": "How does Dijkstra's algorithm find shortest paths?", "expected_docs": ["Shortest Paths and Minimum Spanning Trees"], "key_facts": ["distance"]}
+{"id": "os-1", "type": "in_scope", "course": "CS-304", "question": "What is the difference between a process and a thread?", "expected_docs": ["Processes and Threads"], "key_facts": ["address space"]}
+{"id": "os-2", "type": "in_scope", "course": "CS-304", "question": "How does round-robin CPU scheduling work?", "expected_docs": ["CPU Scheduling"], "key_facts": ["quantum"]}
+{"id": "os-3", "type": "in_scope", "course": "CS-304", "question": "What are the four necessary conditions for deadlock?", "expected_docs": ["Deadlocks — Lecture Notes", "Banker's Algorithm"], "key_facts": ["mutual exclusion", "hold and wait", "circular wait"]}
+{"id": "os-4", "type": "in_scope", "course": "CS-304", "question": "How does the Banker's algorithm decide whether a state is safe?", "expected_docs": ["Banker's Algorithm"], "key_facts": ["safe"]}
+{"id": "os-5", "type": "in_scope", "course": "CS-304", "question": "What is a semaphore used for?", "expected_docs": ["Process Synchronization", "Classic Synchronization Problems"], "key_facts": ["wait", "signal"]}
+{"id": "os-6", "type": "in_scope", "course": "CS-304", "question": "How does LRU page replacement choose a victim page?", "expected_docs": ["Virtual Memory and Page Replacement", "Memory Management"], "key_facts": ["least recently used"]}
+{"id": "db-1", "type": "in_scope", "course": "CS-305", "question": "What is a primary key?", "expected_docs": ["Relational Model and ER Modelling"], "key_facts": ["candidate key"]}
+{"id": "db-2", "type": "in_scope", "course": "CS-305", "question": "What does a LEFT OUTER JOIN return?", "expected_docs": ["SQL Fundamentals", "SQL Practice"], "key_facts": ["left"]}
+{"id": "db-3", "type": "in_scope", "course": "CS-305", "question": "What is the difference between 3NF and BCNF?", "expected_docs": ["Functional Dependencies and Normal Forms"], "key_facts": ["superkey"]}
+{"id": "db-4", "type": "in_scope", "course": "CS-305", "question": "What makes a schedule conflict-serializable?", "expected_docs": ["Transactions, Schedules and Serializability"], "key_facts": ["conflict"]}
+{"id": "db-5", "type": "in_scope", "course": "CS-305", "question": "Why are B+ trees used for database indexes?", "expected_docs": ["Storage, Indexing and B+ Trees"], "key_facts": ["leaf"]}
+{"id": "db-6", "type": "in_scope", "course": "CS-305", "question": "What is write-ahead logging?", "expected_docs": ["Logging and Crash Recovery"], "key_facts": ["log"]}
+{"id": "nw-1", "type": "in_scope", "course": "CS-308", "question": "What are the layers of the TCP/IP model?", "expected_docs": ["OSI and TCP/IP Models"], "key_facts": ["transport", "network"]}
+{"id": "nw-2", "type": "in_scope", "course": "CS-308", "question": "How is transmission delay different from propagation delay?", "expected_docs": ["Network Performance and the Physical Layer"], "key_facts": ["propagation"]}
+{"id": "nw-3", "type": "in_scope", "course": "CS-308", "question": "How does a CRC detect transmission errors?", "expected_docs": ["Framing, Error Detection and Reliable Delivery"], "key_facts": ["crc"]}
+{"id": "nw-4", "type": "in_scope", "course": "CS-308", "question": "How many usable hosts are in a /26 subnet?", "expected_docs": ["Subnetting Practice Problems", "IP Addressing, Subnetting and Routing"], "key_facts": ["62"]}
+{"id": "nw-5", "type": "in_scope", "course": "CS-308", "question": "What is the difference between TCP and UDP?", "expected_docs": ["TCP and UDP"], "key_facts": ["connection"]}
+{"id": "nw-6", "type": "in_scope", "course": "CS-308", "question": "How does DNS resolve a domain name?", "expected_docs": ["Application Layer Protocols"], "key_facts": ["dns"]}
+{"id": "ml-1", "type": "in_scope", "course": "ML-302", "question": "What is the cost function of linear regression?", "expected_docs": ["Linear and Logistic Regression", "Gradient Descent Worked Example"], "key_facts": ["squared"]}
+{"id": "ml-2", "type": "in_scope", "course": "ML-302", "question": "What happens if the learning rate is too large?", "expected_docs": ["Gradient Descent Worked Example", "Linear and Logistic Regression"], "key_facts": ["diverge"]}
+{"id": "ml-3", "type": "in_scope", "course": "ML-302", "question": "What is overfitting?", "expected_docs": ["Bias–Variance Trade-off and Regularization"], "key_facts": ["training", "validation"]}
+{"id": "ml-4", "type": "in_scope", "course": "ML-302", "question": "What is the difference between precision and recall?", "expected_docs": ["Classification Evaluation Metrics"], "key_facts": ["precision", "recall"]}
+{"id": "ml-5", "type": "in_scope", "course": "ML-302", "question": "How does k-fold cross-validation work?", "expected_docs": ["Cross-Validation and Data Leakage", "Classification Evaluation Metrics"], "key_facts": ["fold"]}
+{"id": "ml-6", "type": "in_scope", "course": "ML-302", "question": "How does k-means clustering assign points to clusters?", "expected_docs": ["Clustering and Dimensionality Reduction"], "key_facts": ["centroid"]}
+{"id": "neg-1", "type": "negative", "course": null, "question": "Who won the 2018 FIFA World Cup?"}
+{"id": "neg-2", "type": "negative", "course": null, "question": "Can you explain how blockchain consensus algorithms work?"}
+{"id": "neg-3", "type": "negative", "course": null, "question": "What is the syllabus for the quantum computing elective?"}
+{"id": "neg-4", "type": "negative", "course": null, "question": "What is the capital of Australia?"}
+{"id": "neg-5", "type": "negative", "course": null, "question": "Write me a poem about the ocean."}
+{"id": "neg-6", "type": "negative", "course": null, "question": "How do I bake sourdough bread?"}
+{"id": "neg-7", "type": "negative", "course": null, "question": "What is the current price of Bitcoin?"}
+{"id": "neg-8", "type": "negative", "course": null, "question": "Explain the plot of Hamlet."}
+{"id": "neg-9", "type": "negative", "course": "ML-302", "question": "How do transformers use self-attention in large language models?"}
+{"id": "neg-10", "type": "negative", "course": "CS-201", "question": "How does a red-black tree recolor nodes after deletion?"}
+{"id": "perm-1", "type": "permission", "course": null, "question": "What are the four necessary conditions for deadlock in an operating system?", "forbidden_course": "CS-304"}
+{"id": "perm-2", "type": "permission", "course": null, "question": "How does round-robin CPU scheduling use a time quantum?", "forbidden_course": "CS-304"}
+{"id": "perm-3", "type": "permission", "course": null, "question": "How does the Banker's algorithm check for a safe state?", "forbidden_course": "CS-304"}
+{"id": "perm-4", "type": "permission", "course": null, "question": "What is the difference between a process and a thread?", "forbidden_course": "CS-304"}
+{"id": "perm-5", "type": "permission", "course": null, "question": "How does LRU page replacement work?", "forbidden_course": "CS-304"}
+{"id": "perm-6", "type": "permission", "course": "CS-304", "question": "Explain semaphores.", "forbidden_course": "CS-304"}

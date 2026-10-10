@@ -84,15 +84,22 @@ class CourseListSerializer(serializers.ModelSerializer):
         return annotated if annotated is not None else obj.enrolled_count
 
     def get_unit_count(self, obj: Course) -> int:
-        return obj.units.count()
+        annotated = getattr(obj, "unit_total", None)
+        return annotated if annotated is not None else obj.units.count()
 
     def get_document_count(self, obj: Course) -> int:
+        annotated = getattr(obj, "ready_documents", None)
+        if annotated is not None:
+            return annotated
         return obj.documents.filter(is_latest=True, processing_status="completed").count()
 
     def get_is_enrolled(self, obj: Course) -> bool:
+        annotated = getattr(obj, "viewer_enrolled", None)
+        if annotated is not None:
+            return annotated
         request = self.context.get("request")
-        if not request or not request.user.is_authenticated:
-            return False
+        if not request or not request.user.is_authenticated or not request.user.is_student:
+            return False  # only students enroll
         return obj.enrollments.filter(student=request.user, is_active=True).exists()
 
 

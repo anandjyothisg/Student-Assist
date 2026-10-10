@@ -83,3 +83,23 @@ def test_history_replays_answers_without_stale_citation_numbers():
     msgs = build_messages(u, s, "And a min-heap?", [_chunk(1, "min-heap root is the smallest key")])
     replayed = [m for m in msgs if m["role"] == "assistant"]
     assert replayed and "[1]" not in replayed[0]["content"] and "[3]" not in replayed[0]["content"]
+
+
+def test_uncited_answers_get_sources_only_where_wording_supports_them():
+    chunks = [
+        _chunk(1, "A stack follows last in first out ordering; push adds and pop removes the most recent element."),
+        _chunk(2, "Queues follow first in first out ordering using enqueue at the rear and dequeue at the front."),
+    ]
+    answer = ("A stack follows last in first out ordering where push adds and pop removes the most recent element. "
+              "Bananas are yellow fruit grown in tropical regions worldwide.")
+    final, citations = finalize_citations(answer, chunks)
+    assert "element. [1]" in final or "element [1]." in final or "[1]" in final.split("Bananas")[0]
+    assert "[" not in final.split("Bananas")[1]  # unsupported sentence stays uncited
+    assert citations[0]["cited"] and citations[0].get("attributed") is True
+    assert not citations[1]["cited"]
+
+
+def test_model_citations_are_not_marked_as_attributed():
+    chunks = [_chunk(1, "Heaps keep the largest key at the root.")]
+    _, citations = finalize_citations("The root holds the largest key [1].", chunks)
+    assert citations[0]["cited"] and "attributed" not in citations[0]

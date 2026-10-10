@@ -314,11 +314,59 @@ def build_messages(user, session: ChatSession, question: str, chunks: list[dict]
         # markers so the model can't reuse stale numbers.
         content = _CITE_RE.sub("", m.content) if m.role == "assistant" else m.content
         messages.append({"role": m.role, "content": content})
-    messages.append({
-        "role": "user",
-        "content": f"Course-material excerpts:\n\n{_context_block(chunks)}\n\nQuestion: {question}",
-    })
+    messages.append({"role": "user", "content": user_turn(question, chunks)})
     return messages
+
+
+CITE_REMINDER = (
+    "Answer from the excerpts only. End every sentence or bullet point with the number of the excerpt "
+    "it comes from, like [1] or [2][3]."
+)
+
+
+def user_turn(question: str, chunks: list[dict]) -> str:
+    # Small models follow the instruction nearest the question best, so the
+    # citation rule is repeated here as well as in the system prompt.
+    return f"Course-material excerpts:\n\n{_context_block(chunks)}\n\nQuestion: {question}\n\n{CITE_REMINDER}"
+
+
+_WORD_RE = re.compile(r"[a-z0-9][a-z0-9'+\-]*")
+_ATTR_STOP = {
+    "the", "and", "for", "are", "with", "that", "this", "from", "into", "which", "when", "where", "what", "their",
+    "there", "these", "those", "have", "has", "had", "been", "being", "will", "would", "can", "could", "should",
+    "also", "than", "then", "such", "each", "other", "more", "most", "some", "only", "very", "used", "using",
+    "between", "both", "while", "because", "about", "they", "them", "its", "it's", "not", "but", "any", "all",
+}
+
+
+def _content_words(text: str) -> set[str]:
+    return {w for w in _WORD_RE.findall(text.lower()) if len(w) > 3 and w not in _ATTR_STOP}
+
+
+def attribute_citations(answer: str, chunks: list[dict]) -> str:
+    """
+    Fallback for answers the model wrote without any [n] markers: attach a
+    source to a sentence only when it shares substantial, distinctive wording
+    with one excerpt (at least 4 content words and half of the sentence's).
+    Sentences without such support stay uncited. The caller flags these
+    citations as matched by wording, never as the model's own.
+    """
+    excerpts = [_content_words(c["content"]) for c in chunks]
+    out_lines = []
+    for line in answer.split("\n"):
+        pieces = re.split(r"(?<=[.!?])(\s+)", line)
+        rebuilt = []
+        for piece in pieces:
+            words = _content_words(piece)
+            if len(words) >= 4 and not _CITE_RE.search(piece):
+                scores = [(len(words & ex), i) for i, ex in enumerate(excerpts)]
+                best, idx = max(scores) if scores else (0, -1)
+                if best >= 4 and best >= 0.5 * len(words):
+                    stripped = piece.rstrip()
+                    piece = f"{stripped} [{idx + 1}]" + piece[len(stripped):]
+            rebuilt.append(piece)
+        out_lines.append("".join(rebuilt))
+    return "\n".join(out_lines)
 
 
 _REFUSAL_RE = re.compile(
@@ -350,10 +398,17 @@ def finalize_citations(answer: str, chunks: list[dict]) -> tuple[str, list[dict]
     n = len(chunks)
     answer = _CITE_RE.sub(lambda m: m.group(0) if 1 <= int(m.group(1)) <= n else "", answer)
     answer = re.sub(r"[ \t]+([.,;:])", r"\1", answer)
+    attributed = False
+    if not _CITE_RE.search(answer):
+        matched = attribute_citations(answer, chunks)
+        attributed = matched != answer
+        answer = matched
     cited = {int(x) for x in _CITE_RE.findall(answer)}
     citations = to_citations(chunks)
     for c in citations:
         c["cited"] = c["index"] in cited
+        if attributed and c["cited"]:
+            c["attributed"] = True  # matched by wording, not cited by the model
     return answer, citations
 
 
@@ -484,11 +539,14 @@ def stream_ask(user, question: str, course_id=None, session_id=None) -> tuple[Ch
             stream = get_ollama_client().chat(
                 messages=build_messages(user, session, question, chunks), stream=True, **chat_options()
             )
+            deadline = time.perf_counter() + settings.OLLAMA_ANSWER_DEADLINE
             for piece in stream:
                 text = piece.get("message", {}).get("content", "")
                 if text:
                     parts.append(text)
                     yield _sse("token", {"text": text})
+                if time.perf_counter() > deadline:
+                    raise TimeoutError("answer deadline reached")
             answer = "".join(parts).strip()
             status = classify(answer)
             if status == AnswerStatus.NOT_FOUND:

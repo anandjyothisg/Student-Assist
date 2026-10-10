@@ -202,3 +202,7 @@ ipython_config.py
 # Demo environment
 /server/backups/
 /server/src/tmp/
+
+# RAG evaluation run outputs
+/server/eval_reports/
+/client/e2e/out/

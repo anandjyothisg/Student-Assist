@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart2, ChevronDown, MessageCircleQuestion, SearchX } from 'lucide-react';
 import api from '../auth/api';
 import { PageHeader } from '../ui/PageHeader';
@@ -128,15 +128,18 @@ export function AnalyticsPage({ user }) {
   const [state, setState] = useState('loading');
   const [courseOptions, setCourseOptions] = useState([]);
 
+  const seq = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++seq.current;
     setState('loading');
     try {
       const res = await api.get('/ai/insights/', { params: { course: course || undefined, days } });
+      if (mine !== seq.current) return; // filters changed while this was loading
       setData(res.data);
       if (!course) setCourseOptions(res.data.courses);
       setState('ready');
     } catch {
-      setState('error');
+      if (mine === seq.current) setState('error');
     }
   }, [course, days]);
   useEffect(() => { load(); }, [load]);
@@ -148,7 +151,7 @@ export function AnalyticsPage({ user }) {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title="Insights"
+        title="Class Insights"
         description={isAdmin ? 'How students use the assistant across every course — computed from real conversations.' : 'What your students ask, when they study, and where your materials leave gaps.'}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -185,8 +188,8 @@ export function AnalyticsPage({ user }) {
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border lg:grid-cols-4">
             <Kpi label="Questions asked" value={t.questions} detail={`last ${data.period_days} days`} />
             <Kpi label="Active students" value={t.active_students} detail="asked at least one question" />
-            <Kpi label="Answered from materials" value={pct(t.answered_rate)} detail={`${t.answered} of ${t.questions} questions`} />
-            <Kpi label="Not covered by materials" value={t.not_found} detail={`${t.saved_answers} answers saved to notebooks`} />
+            <Kpi label="Answered from course materials" value={pct(t.answered_rate)} detail={`${t.answered} of ${t.questions} questions`} />
+            <Kpi label="Couldn’t be answered" value={t.not_found} detail={`${t.saved_answers} answers saved to notebooks`} />
           </dl>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">

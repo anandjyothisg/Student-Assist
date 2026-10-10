@@ -23,6 +23,7 @@ const Notebook = lazy(() => import('./components/notebook/Notebook').then((m) =>
 const AdminUsers = lazy(() => import('./components/admin/AdminUsers').then((m) => ({ default: m.AdminUsers })));
 const AdminCatalog = lazy(() => import('./components/admin/AdminCatalog').then((m) => ({ default: m.AdminCatalog })));
 const CoursesPage = lazy(() => import('./components/courses/CoursesPage').then((m) => ({ default: m.CoursesPage })));
+const StudentHome = lazy(() => import('./components/home/StudentHome').then((m) => ({ default: m.StudentHome })));
 const Landing = lazy(() => import('./components/landing/Landing'));
 
 /* ─── Hash routing (#/notebook, #/documents?doc=…) — survives refresh & back/forward ─── */
@@ -45,7 +46,7 @@ const AUTH_SLUGS = {
   'reset-password': 'reset-password',
 };
 const SLUG_TO_SCREEN = Object.fromEntries(Object.entries(AUTH_SLUGS).map(([screen, slug]) => [slug, screen]));
-const APP_TABS = new Set(['dashboard', 'academic', 'assistant', 'documents', 'courses', 'accounts', 'analytics', 'notebook']);
+const APP_TABS = new Set(['home', 'dashboard', 'academic', 'assistant', 'documents', 'courses', 'accounts', 'analytics', 'notebook']);
 
 function guestScreen(tab, hasEmail) {
   const screen = SLUG_TO_SCREEN[tab] ?? (APP_TABS.has(tab) ? 'login' : null); // deep link into the app → sign in first
@@ -93,6 +94,7 @@ function AppContent() {
   const [loadingUser, setLoadingUser] = useState(true);
   const [activeTab, setActiveTabState] = useState(readHashTab);
   const [guestTab, setGuestTab] = useState(readHashTab);
+  const [bootError, setBootError] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
   const [authOtp, setAuthOtp] = useState('');
 
@@ -132,9 +134,16 @@ function AppContent() {
           if (requested !== tab && APP_TABS.has(requested)) toast.error("You don't have access to that section.");
           writeHashTab(tab, { replace: true, params: requested === tab ? readRoute().params : {} });
         }
-      } catch {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+      } catch (err) {
+        // Only an explicit rejection ends the session. If the server is
+        // unreachable (restarting, offline), keep the tokens and offer a retry.
+        const code = err?.response?.status;
+        if (code === 401 || code === 403) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+        } else if (!cancelled) {
+          setBootError(true);
+        }
       } finally {
         if (!cancelled) setLoadingUser(false);
       }
@@ -226,6 +235,25 @@ function AppContent() {
 
   if (loadingUser) return <FullScreenLoader />;
 
+  if (bootError) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-canvas px-6" role="alert">
+        <div className="flex max-w-sm flex-col items-center gap-4 text-center">
+          <BrandMark size={40} />
+          <h1 className="text-[17px] font-semibold text-fg">Can’t reach AuraStudy right now</h1>
+          <p className="text-[14px] leading-relaxed text-fg-3">The server didn’t respond. You’re still signed in; try again in a moment.</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="h-10 rounded-md bg-fg px-4 text-[14px] font-medium text-canvas transition-colors hover:bg-fg/88"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     const authScreen = guestScreen(guestTab, !!authEmail);
     if (!authScreen) {
@@ -268,6 +296,7 @@ function AppContent() {
     academic: user.role === 'admin' ? <AdminCatalog user={user} /> : <TeacherDashboard user={user} />,
     assistant: <AskScreen user={user} onNavigate={setActiveTab} />,
     documents: <DocumentViewer user={user} onNavigate={setActiveTab} />,
+    home: <StudentHome user={user} onNavigate={setActiveTab} />,
     courses: <CoursesPage user={user} onNavigate={setActiveTab} />,
     accounts: <AdminUsers user={user} />,
     analytics: <AnalyticsPage user={user} />,

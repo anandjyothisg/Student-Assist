@@ -21,6 +21,12 @@ const ROLES = [
   { id: 'admin', label: 'Admins' },
 ];
 const selectCls = 'field-control appearance-none !pr-9';
+const ROLE_NAME = { student: 'Student', teacher: 'Teacher', admin: 'Admin' };
+const ROLE_EFFECT = {
+  student: 'They’ll only see the courses they’re enrolled in.',
+  teacher: 'They’ll be able to manage and upload files for the courses they teach.',
+  admin: 'They’ll get full access to every course, user and setting.',
+};
 
 function joined(iso) {
   try { return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return '—'; }
@@ -124,6 +130,7 @@ function UserSheet({ user, me, onClose, onChanged }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const [pendingRole, setPendingRole] = useState(null);
   if (!user) return <Sheet isOpen={false} onClose={onClose} />;
   const isMe = user.id === me?.id;
 
@@ -134,7 +141,7 @@ function UserSheet({ user, me, onClose, onChanged }) {
       toast.success(msg);
       onChanged();
     } catch (err) { toast.error(extractErrorMessage(err)); }
-    finally { setBusy(false); setConfirmDeactivate(false); }
+    finally { setBusy(false); setConfirmDeactivate(false); setPendingRole(null); }
   };
 
   return (
@@ -170,7 +177,7 @@ function UserSheet({ user, me, onClose, onChanged }) {
         </dl>
 
         <div className="flex flex-col gap-4 border-t border-border pt-5">
-          <SelectField label="Role" value={user.role} onChange={(e) => patch({ role: e.target.value }, `Role changed to ${e.target.value}.`)}>
+          <SelectField label="Role" value={user.role} onChange={(e) => { if (e.target.value !== user.role) setPendingRole(e.target.value); }}>
             <option value="student">Student</option><option value="teacher">Teacher</option><option value="admin">Admin</option>
           </SelectField>
           {isMe && <p className="-mt-2 text-xs text-fg-3">You can’t change your own role or deactivate yourself.</p>}
@@ -184,6 +191,9 @@ function UserSheet({ user, me, onClose, onChanged }) {
       <Modal isOpen={confirmDeactivate} onClose={() => setConfirmDeactivate(false)} title={`Deactivate ${displayName(user)}?`} size="sm"
         description="They’ll be signed out everywhere and won’t be able to sign in until reactivated. Their data is kept."
         footer={<><Button variant="ghost" onClick={() => setConfirmDeactivate(false)}>Cancel</Button><Button variant="danger" loading={busy} onClick={() => patch({ is_active: false }, 'Account deactivated.')}>Deactivate</Button></>} />
+      <Modal isOpen={!!pendingRole} onClose={() => setPendingRole(null)} title={`Make ${displayName(user)} ${pendingRole === 'admin' ? 'an' : 'a'} ${ROLE_NAME[pendingRole]?.toLowerCase()}?`} size="sm"
+        description={ROLE_EFFECT[pendingRole]}
+        footer={<><Button variant="ghost" onClick={() => setPendingRole(null)}>Cancel</Button><Button loading={busy} onClick={() => patch({ role: pendingRole }, `Role changed to ${ROLE_NAME[pendingRole]}.`)}>Change role</Button></>} />
     </Sheet>
   );
 }
@@ -252,7 +262,7 @@ export function AdminUsers({ user: me }) {
                     <span className="hidden w-48 truncate text-[12.5px] text-fg-3 lg:block">{subtitle(u)}</span>
                     <span className="hidden w-36 text-[12.5px] text-fg-3 md:block">{lastSeen(u.last_login)}</span>
                     <span className="hidden sm:contents"><Badge tone={ROLE_TONE[u.role]} className="capitalize">{u.role}</Badge></span>
-                    <Badge tone={u.is_active ? 'success' : 'neutral'} dot>{u.is_active ? 'Active' : 'Off'}</Badge>
+                    <Badge tone={u.is_active ? 'success' : 'neutral'} dot>{u.is_active ? 'Active' : 'Deactivated'}</Badge>
                     <MoreHorizontal className="size-4 shrink-0 text-fg-3" aria-hidden />
                   </button>
                 </li>

@@ -7,6 +7,8 @@ import { Badge } from '../ui/Badge';
 import { Avatar } from '../ui/Avatar';
 import { useToast } from '../ui/Toast';
 import { mockAuthApi } from '../auth/api';
+import { STRONG_PASSWORD } from '../auth/AuthLayout';
+import { PasswordChecklist } from '../auth/Register';
 import { ThemeSegmented } from './AccountMenu';
 
 const TABS = [
@@ -62,7 +64,7 @@ export function SettingsPanel({ user, onLogout, onUpdateUser }) {
       onUpdateUser?.({ ...user, username: name.trim() });
       toast.success('Profile saved.');
     } catch (err) {
-      toast.error(err.message || 'Could not save your profile. Please try again.');
+      toast.error(err.message || 'Couldn’t save your profile. Try again.');
     } finally {
       setSavingProfile(false);
     }
@@ -73,6 +75,7 @@ export function SettingsPanel({ user, onLogout, onUpdateUser }) {
     const errs = {};
     if (!pw.current) errs.current = 'Enter your current password.';
     if (pw.next.length < MIN_PASSWORD) errs.next = `Use at least ${MIN_PASSWORD} characters.`;
+    else if (!STRONG_PASSWORD.test(pw.next)) errs.next = 'Include upper and lowercase letters and a number.';
     if (pw.confirm !== pw.next) errs.confirm = 'Passwords don’t match.';
     setPwErrors(errs);
     if (Object.keys(errs).length) return;
@@ -83,7 +86,7 @@ export function SettingsPanel({ user, onLogout, onUpdateUser }) {
       toast.success('Password updated.');
       setPw({ current: '', next: '', confirm: '' });
     } catch (err) {
-      toast.error(err.message || 'Could not update your password.');
+      toast.error(err.message || 'Couldn’t change your password. Try again.');
     } finally {
       setSavingPw(false);
     }
@@ -157,7 +160,10 @@ export function SettingsPanel({ user, onLogout, onUpdateUser }) {
           <Section title="Password" description={`Use at least ${MIN_PASSWORD} characters. Avoid common words and reused passwords.`}>
             <form onSubmit={savePassword} className="flex flex-col gap-4" noValidate>
               <Input label="Current password" revealable autoComplete="current-password" value={pw.current} onChange={setField('current')} error={pwErrors.current} />
-              <Input label="New password" revealable autoComplete="new-password" value={pw.next} onChange={setField('next')} error={pwErrors.next} />
+              <div className="flex flex-col gap-2">
+                <Input label="New password" revealable autoComplete="new-password" value={pw.next} onChange={setField('next')} error={pwErrors.next} aria-describedby="settings-pw-rules" />
+                <PasswordChecklist id="settings-pw-rules" value={pw.next} />
+              </div>
               <Input label="Confirm new password" revealable autoComplete="new-password" value={pw.confirm} onChange={setField('confirm')} error={pwErrors.confirm} />
               <div>
                 <Button type="submit" loading={savingPw}>Update password</Button>

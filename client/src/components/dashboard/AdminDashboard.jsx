@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Skeleton } from '../ui/Skeleton';
 import { ErrorState } from '../ui/ErrorState';
-import { fetchAll, useAsync } from '../admin/useAdminData';
+import { useAsync } from '../admin/useAdminData';
 
 async function timed(fn) {
   const t = performance.now();
@@ -15,15 +15,13 @@ async function timed(fn) {
 }
 
 async function loadStatus() {
-  const [health, auth, users, courses, docs] = await Promise.all([
-    api.get('/ai/health/', { params: { refresh: 'true' } }).then((r) => r.data).catch(() => null),
+  // Counts come pre-aggregated from the health endpoint; nothing here lists every row.
+  const [health, auth, docs] = await Promise.all([
+    api.get('/ai/health/', { params: { refresh: 'true' } }).then((r) => r.data),
     timed(() => api.get('/auth/me/')),
-    fetchAll('/accounts/users/'),
-    fetchAll('/academic/courses/'),
     timed(() => api.get('/documents/', { params: { page_size: 1 } })),
   ]);
-  const allDocs = await fetchAll('/documents/');
-  return { health, auth, docsProbe: docs, users, courses, docs: allDocs, checkedAt: new Date() };
+  return { health, auth, docsProbe: docs, counts: health.counts, checkedAt: new Date() };
 }
 
 const STATE = {
@@ -65,18 +63,20 @@ function ServiceRow({ name, status, detail }) {
 export function AdminDashboard({ setActiveTab }) {
   const { data, state, reload } = useAsync(loadStatus, []);
 
-  const byRole = (data?.users || []).reduce((a, u) => { a[u.role] = (a[u.role] || 0) + 1; return a; }, {});
-  const docCounts = (data?.docs || []).reduce((a, d) => { a[d.processing_status] = (a[d.processing_status] || 0) + 1; return a; }, {});
-  const totalDocs = data?.docs.length || 0;
-  const attention = (data?.docs || []).filter((d) => d.processing_status === 'failed' || d.processing_status === 'pending').slice(0, 5);
-  const published = (data?.courses || []).filter((c) => c.is_published).length;
+  const counts = data?.counts;
+  const byRole = counts?.users.by_role || {};
+  const docCounts = counts?.documents.by_status || {};
+  const totalDocs = counts?.documents.total || 0;
+  const attention = counts?.attention || [];
+  const published = counts?.courses.published || 0;
+  const courseTotal = counts?.courses.total || 0;
   const queued = (docCounts.pending || 0) + (docCounts.processing || 0);
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title="Status"
-        description="Live counts and health checks for the workspace, measured from your browser."
+        title="System Status"
+        description="Live checks that everything is working, measured from your browser."
         actions={
           <>
             <Button variant="secondary" iconLeft={RefreshCw} onClick={reload} loading={state === 'loading'}>Refresh</Button>
@@ -87,7 +87,7 @@ export function AdminDashboard({ setActiveTab }) {
 
       {state === 'error' ? (
         <div className="rounded-lg border border-border bg-surface">
-          <ErrorState title="Couldn’t load workspace status" description="The API didn’t respond. Check that the server is running." onRetry={reload} />
+          <ErrorState title="Couldn’t load system status" description="The server didn’t respond. Check that it’s running, then try again." onRetry={reload} />
         </div>
       ) : (
         <>
@@ -98,10 +98,10 @@ export function AdminDashboard({ setActiveTab }) {
               ))
             ) : (
               <>
-                <Stat icon={Users} label="Users" value={data.users.length} detail={`${byRole.student || 0} students · ${byRole.teacher || 0} teachers · ${byRole.admin || 0} admins`} />
-                <Stat icon={Layers} label="Courses" value={data.courses.length} detail={`${published} published · ${data.courses.length - published} ${data.courses.length - published === 1 ? 'draft' : 'drafts'}`} />
+                <Stat icon={Users} label="Users" value={counts.users.total} detail={`${byRole.student || 0} students · ${byRole.teacher || 0} teachers · ${byRole.admin || 0} admins`} />
+                <Stat icon={Layers} label="Courses" value={courseTotal} detail={`${published} published · ${courseTotal - published} ${courseTotal - published === 1 ? 'draft' : 'drafts'}`} />
                 <Stat icon={FileText} label="Documents" value={totalDocs} detail={`${docCounts.completed || 0} ready to answer from`} />
-                <Stat icon={RefreshCw} label="Indexing queue" value={queued} detail={docCounts.failed ? `${docCounts.failed} failed` : 'No failures'} />
+                <Stat icon={RefreshCw} label="Files waiting" value={queued} detail={docCounts.failed ? `${docCounts.failed} failed` : 'No failures'} />
               </>
             )}
           </dl>
@@ -117,34 +117,46 @@ export function AdminDashboard({ setActiveTab }) {
                   Array.from({ length: 4 }).map((_, i) => <li key={i} className="px-5 py-4"><Skeleton className="h-4" width={`${60 - i * 8}%`} /></li>)
                 ) : (
                   <>
-                    <ServiceRow name="API" status={data.docsProbe.ok ? (data.docsProbe.ms > 1500 ? 'warn' : 'ok') : 'down'} detail={`Document list responded in ${data.docsProbe.ms} ms`} />
-                    <ServiceRow name="Authentication" status={data.auth.ok ? 'ok' : 'down'} detail={`Session check responded in ${data.auth.ms} ms`} />
+                    <ServiceRow name="Server" status={data.docsProbe.ok ? (data.docsProbe.ms > 1500 ? 'warn' : 'ok') : 'down'} detail={`Responded in ${data.docsProbe.ms} ms`} />
+                    <ServiceRow name="Sign-in" status={data.auth.ok ? 'ok' : 'down'} detail={`Responded in ${data.auth.ms} ms`} />
                     <ServiceRow
-                      name="Document processing"
+                      name="File processing"
                       status={docCounts.failed ? 'warn' : queued && !docCounts.processing ? 'warn' : 'ok'}
-                      detail={queued ? `${queued} waiting to be indexed` : 'Every upload is indexed'}
+                      detail={queued ? `${queued} ${queued === 1 ? 'file' : 'files'} waiting to be processed` : 'Every uploaded file is ready'}
                     />
                     <ServiceRow
-                      name={`Language model (${data.health?.llm?.model || 'Ollama'})`}
+                      name="AI answers"
                       status={!data.health ? 'unknown' : data.health.ready ? 'ok' : 'down'}
-                      detail={!data.health ? 'Health endpoint unavailable' : data.health.ready
-                        ? (data.health.llm.loaded ? 'Loaded in memory and ready to answer' : 'Available — loads on the first question')
-                        : data.health.llm.error}
+                      detail={!data.health ? 'Couldn’t check' : data.health.ready
+                        ? (data.health.llm.loaded ? 'Ready to answer' : 'Ready. The first answer takes a little longer')
+                        : 'Offline. Students see matching parts of their materials instead of written answers'}
                     />
                     <ServiceRow
-                      name="Vector store"
+                      name="Search"
                       status={!data.health?.vector_store ? 'unknown' : data.health.vector_store.vectors > 0 ? 'ok' : 'warn'}
                       detail={data.health?.vector_store
-                        ? `${data.health.vector_store.vectors.toLocaleString()} passages across ${data.health.vector_store.collections} course indexes · ${data.health.embedding_model}`
-                        : 'Unavailable'}
+                        ? `${data.health.vector_store.vectors.toLocaleString()} searchable sections across ${data.health.vector_store.collections} ${data.health.vector_store.collections === 1 ? 'course' : 'courses'}`
+                        : 'Couldn’t check'}
                     />
                   </>
                 )}
               </ul>
+              {state === 'ready' && data.health && (
+                <details className="rounded-lg border border-border bg-surface px-5 py-3 text-[13px] text-fg-3">
+                  <summary className="cursor-pointer select-none font-medium text-fg-2">Technical details</summary>
+                  <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5">
+                    <dt>Language model</dt><dd className="break-words font-mono text-[12px] text-fg-2">{data.health.llm?.model || '—'}{data.health.llm?.loaded ? ' (loaded)' : ''}</dd>
+                    {data.health.llm?.error && <><dt>Model error</dt><dd className="break-words font-mono text-[12px] text-fg-2">{data.health.llm.error}</dd></>}
+                    <dt>Embedding model</dt><dd className="break-words font-mono text-[12px] text-fg-2">{data.health.embedding_model || '—'}</dd>
+                    {data.health.vector_store && <><dt>Vector index</dt><dd className="font-mono text-[12px] text-fg-2">{data.health.vector_store.vectors} vectors · {data.health.vector_store.collections} collections</dd></>}
+                    {data.health.retrieval && <><dt>Retrieval</dt><dd className="font-mono text-[12px] text-fg-2">top {data.health.retrieval.top_k} · max distance {data.health.retrieval.max_distance}</dd></>}
+                  </dl>
+                </details>
+              )}
             </section>
 
             <section className="flex flex-col gap-3" aria-labelledby="index-h">
-              <h2 id="index-h" className="text-[15px] font-semibold text-fg">Index health</h2>
+              <h2 id="index-h" className="text-[15px] font-semibold text-fg">File processing</h2>
               <div className="rounded-lg border border-border bg-surface p-5">
                 {state === 'loading' ? (
                   <div className="flex flex-col gap-3"><Skeleton className="h-2.5" /><Skeleton className="h-3" width="60%" /></div>

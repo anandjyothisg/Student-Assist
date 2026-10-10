@@ -30,6 +30,7 @@ class DocumentType(models.TextChoices):
     DOCX = "docx", _("Word Document")
     PPTX = "pptx", _("PowerPoint")
     TXT = "txt", _("Plain Text")
+    MD = "md", _("Markdown")
 
 
 # ---------------------------------------------------------------------------

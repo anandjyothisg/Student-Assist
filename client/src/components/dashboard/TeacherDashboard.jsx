@@ -21,10 +21,10 @@ const ACCEPT = '.pdf,.docx,.pptx,.txt,.md';
 const MAX_MB = 50;
 
 const STATUS = {
-  completed: { tone: 'success', label: 'Ready for AI' },
-  processing: { tone: 'warning', label: 'Indexing' },
-  pending: { tone: 'neutral', label: 'Queued' },
-  failed: { tone: 'error', label: 'Failed' },
+  completed: { tone: 'success', label: 'Ready to use' },
+  processing: { tone: 'warning', label: 'Processing…' },
+  pending: { tone: 'neutral', label: 'Waiting' },
+  failed: { tone: 'error', label: 'Couldn’t process' },
 };
 /* A new version stays out of search (and the old one stays live) until it is indexed. */
 const isPendingVersion = (d) => d && !d.is_latest && d.processing_status !== 'completed';
@@ -163,7 +163,7 @@ function Uploader({ course, structure, topicId, setTopicId, onUploaded }) {
     if (topicId) fd.append('topic', topicId);
     try {
       const res = await api.post('/documents/upload/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success(`“${res.data.title}” uploaded — indexing now.`);
+      toast.success(`“${res.data.title}” uploaded. It will be ready for students in a moment.`);
       onUploaded(res.data);
       reset();
     } catch (err) {
@@ -208,7 +208,7 @@ function Uploader({ course, structure, topicId, setTopicId, onUploaded }) {
         {error && <p role="alert" className="text-xs text-error">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={reset} disabled={uploading}>Cancel</Button>
-          <Button type="submit" iconLeft={UploadCloud} loading={uploading}>{uploading ? 'Uploading…' : 'Upload and index'}</Button>
+          <Button type="submit" iconLeft={UploadCloud} loading={uploading}>{uploading ? 'Uploading…' : 'Upload file'}</Button>
         </div>
       </form>
     );
@@ -227,7 +227,7 @@ function Uploader({ course, structure, topicId, setTopicId, onUploaded }) {
         <span className={`inline-flex size-10 shrink-0 items-center justify-center rounded-md ${drag ? 'bg-accent text-accent-fg' : 'bg-subtle text-fg-2'}`}><UploadCloud className="size-5" aria-hidden /></span>
         <span className="min-w-0">
           <span className="block text-[14px] font-medium text-fg">{drag ? 'Drop to add this file' : 'Add course material'}</span>
-          <span className="block text-[13px] text-fg-3">Drag a file here or browse · PDF, DOCX, PPTX, TXT or MD up to {MAX_MB} MB · indexed automatically</span>
+          <span className="block text-[13px] text-fg-3">Drag a file here or browse · PDF, Word, PowerPoint, text or Markdown, up to {MAX_MB} MB</span>
         </span>
       </button>
       <input ref={inputRef} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} onChange={(e) => pick(e.target.files?.[0])} />
@@ -273,8 +273,8 @@ function DocumentSheet({ doc, onClose, onReprocess, onDelete, onNewVersion }) {
             {isPendingVersion(doc) && (
               <p className="mt-3 rounded-md bg-subtle px-3 py-2 text-[12.5px] text-fg-2">
                 {doc.processing_status === 'failed'
-                  ? 'This new version couldn\u2019t be indexed, so students still get answers from the previous version.'
-                  : 'This new version replaces the previous one as soon as it\u2019s indexed. Until then students get answers from the previous version.'}
+                  ? 'This new version couldn\u2019t be processed, so students still get answers from the previous version.'
+                  : 'This new version replaces the previous one as soon as it\u2019s ready. Until then students get answers from the previous version.'}
               </p>
             )}
             {doc.processing_status === 'failed' && doc.error_message && (
@@ -284,16 +284,16 @@ function DocumentSheet({ doc, onClose, onReprocess, onDelete, onNewVersion }) {
               <div><dt className="text-fg-3">Type</dt><dd className="mt-0.5 font-medium uppercase text-fg">{doc.file_type || '—'}</dd></div>
               <div><dt className="text-fg-3">Size</dt><dd className="mt-0.5 font-medium text-fg">{sizeLabel(doc.file_size_mb) || '—'}</dd></div>
               <div><dt className="text-fg-3">Pages</dt><dd className="mt-0.5 font-medium tabular text-fg">{doc.page_count || '—'}</dd></div>
-              <div><dt className="text-fg-3">Indexed passages</dt><dd className="mt-0.5 font-medium tabular text-fg">{doc.chunk_count || '—'}</dd></div>
+              <div><dt className="text-fg-3">Searchable sections</dt><dd className="mt-0.5 font-medium tabular text-fg">{doc.chunk_count || '—'}</dd></div>
             </dl>
           </div>
           <div>
-            <p className="mb-2 text-xs font-medium text-fg-3">Extracted text</p>
+            <p className="mb-2 text-xs font-medium text-fg-3">Text preview</p>
             {chunks === null ? (
               <div className="flex flex-col gap-2"><Skeleton className="h-3.5" /><Skeleton className="h-3.5" width="80%" /></div>
             ) : chunks.length === 0 ? (
               <p className="rounded-md border border-dashed border-border-strong px-4 py-5 text-center text-[13px] text-fg-3">
-                {doc.processing_status === 'completed' ? 'No text was extracted from this file.' : 'Text appears here once indexing finishes.'}
+                {doc.processing_status === 'completed' ? 'No text was extracted from this file.' : 'Text appears here once the file is ready.'}
               </p>
             ) : (
               <ol className="flex flex-col gap-2">
@@ -308,9 +308,9 @@ function DocumentSheet({ doc, onClose, onReprocess, onDelete, onNewVersion }) {
           </div>
           <div className="flex flex-wrap gap-2 border-t border-border pt-5">
             {doc.processing_status === 'failed' ? (
-              <Button iconLeft={RefreshCw} onClick={() => onReprocess(doc)}>Retry indexing</Button>
+              <Button iconLeft={RefreshCw} onClick={() => onReprocess(doc)}>Try again</Button>
             ) : (
-              <Button variant="secondary" iconLeft={RefreshCw} onClick={() => onReprocess(doc)} disabled={doc.processing_status === 'processing' || doc.processing_status === 'pending'}>Re-index</Button>
+              <Button variant="secondary" iconLeft={RefreshCw} onClick={() => onReprocess(doc)} disabled={doc.processing_status === 'processing' || doc.processing_status === 'pending'}>Process again</Button>
             )}
             {doc.is_latest && (
               <>
@@ -472,7 +472,7 @@ export function TeacherDashboard() {
     if (doc.topic) fd.append('topic', doc.topic);
     try {
       await api.post('/documents/upload/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success('New version uploaded. It replaces the current one once it\u2019s indexed.');
+      toast.success('New version uploaded. It replaces the current one once it\u2019s ready.');
       setOpenDoc(null);
       fetchCourse({ quiet: true });
     } catch (err) { toast.error(extractErrorMessage(err)); }
@@ -481,7 +481,7 @@ export function TeacherDashboard() {
   const reprocess = async (doc) => {
     try {
       await api.post(`/documents/${doc.id}/reprocess/`);
-      toast.success('Re-indexing started.');
+      toast.success('Processing the file again.');
       setDocs((list) => list.map((d) => (d.id === doc.id ? { ...d, processing_status: 'pending' } : d)));
       setOpenDoc((d) => (d?.id === doc.id ? { ...d, processing_status: 'pending' } : d));
     } catch (err) { toast.error(extractErrorMessage(err)); }
@@ -554,8 +554,8 @@ export function TeacherDashboard() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title="Content"
-        description="Organise each course into units and topics, upload materials, and publish when students should see them."
+        title="My Courses"
+        description="Organise each course into units and topics, upload files, and publish when students should see them."
         actions={<Button iconLeft={Plus} onClick={() => setNewOpen(true)}>New course</Button>}
       />
 
@@ -683,7 +683,7 @@ export function TeacherDashboard() {
                                     {list.length ? (
                                       <ul className="divide-y divide-border">{list.map((d) => <DocLine key={d.id} d={d} />)}</ul>
                                     ) : (
-                                      <p className="px-4 py-3 text-[13px] text-fg-3">Empty folder — {t.description || 'upload the first material for this topic.'}</p>
+                                      <p className="px-4 py-3 text-[13px] text-fg-3">No files yet. {t.description || 'Upload the first file for this topic.'}</p>
                                     )}
                                   </div>
                                 );
@@ -703,7 +703,7 @@ export function TeacherDashboard() {
                     {hasPending && (
                       <p className="flex items-center gap-2 text-xs text-fg-3">
                         <RefreshCw className="size-3.5 animate-spin [animation-duration:2.5s]" aria-hidden />
-                        Indexing in progress — statuses update automatically.
+                        Processing files. Statuses update automatically.
                       </p>
                     )}
                   </>
@@ -732,8 +732,8 @@ export function TeacherDashboard() {
         onClose={() => !busy && setConfirm(null)}
         title={confirm ? { doc: 'Delete this document?', unit: 'Delete this unit?', topic: 'Delete this topic?' }[confirm.kind] : ''}
         description={confirm?.kind === 'doc'
-          ? `“${confirm.item.title}” will be removed for students and from the assistant’s search. This can’t be undone.`
-          : 'Only empty folders can be deleted — move or delete their materials first.'}
+          ? `“${confirm.item.title}” will be removed for students and the AI Assistant will stop using it. This can’t be undone.`
+          : 'Only empty units and topics can be deleted. Move or delete their files first.'}
         size="sm"
         footer={<><Button variant="ghost" onClick={() => setConfirm(null)} disabled={busy}>Cancel</Button><Button variant="danger" iconLeft={Trash2} onClick={doConfirm} loading={busy}>Delete</Button></>}
       />

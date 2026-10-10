@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, CornerDownLeft, Settings, SunMoon, LogOut } from 'lucide-react';
+import { Search, CornerDownLeft, Settings, SunMoon, LogOut, MessageSquare, MessageSquarePlus } from 'lucide-react';
 import { NAV_ITEMS } from './navConfig';
+import { chatApi } from '../auth/api';
 import { useTheme } from '../ui/Theme';
 import { useOverlay } from '../ui/useOverlay';
 
@@ -16,7 +17,19 @@ export function CommandPalette({ isOpen, onClose, setActiveTab, user, onOpenSett
   const panelRef = useRef(null);
   const listRef = useRef(null);
   const { toggleTheme, isDark } = useTheme();
+  const [recentChats, setRecentChats] = useState([]);
   useOverlay(isOpen, onClose, panelRef);
+
+  // Recent chats are fetched each time the palette opens, so they're current.
+  // If the request fails the palette still works, just without them.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    let cancelled = false;
+    chatApi.sessions()
+      .then((list) => { if (!cancelled) setRecentChats((list?.results ?? list ?? []).slice(0, 5)); })
+      .catch(() => { if (!cancelled) setRecentChats([]); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   const commands = useMemo(() => {
     const nav = (NAV_ITEMS[user?.role] ?? NAV_ITEMS.student).map((i) => ({
@@ -27,13 +40,24 @@ export function CommandPalette({ isOpen, onClose, setActiveTab, user, onOpenSett
       icon: i.icon,
       run: () => setActiveTab(i.tab),
     }));
+    const chats = [
+      { id: 'new-chat', group: 'AI Assistant', title: 'New chat', desc: 'Ask the AI a new question', icon: MessageSquarePlus, run: () => setActiveTab('assistant', {}) },
+      ...recentChats.map((c) => ({
+        id: `chat-${c.id}`,
+        group: 'AI Assistant',
+        title: c.title || 'Untitled chat',
+        desc: c.course_code ? `Continue chat · ${c.course_code}` : 'Continue chat',
+        icon: MessageSquare,
+        run: () => setActiveTab('assistant', { session: c.id }),
+      })),
+    ];
     const actions = [
       { id: 'theme', group: 'Actions', title: isDark ? 'Switch to light theme' : 'Switch to dark theme', icon: SunMoon, run: toggleTheme },
       { id: 'settings', group: 'Actions', title: 'Open settings', desc: 'Profile, password and appearance', icon: Settings, run: onOpenSettings },
       { id: 'logout', group: 'Actions', title: 'Sign out', icon: LogOut, run: onLogout },
     ];
-    return [...nav, ...actions];
-  }, [user?.role, setActiveTab, toggleTheme, isDark, onOpenSettings, onLogout]);
+    return [...nav, ...chats, ...actions];
+  }, [user?.role, setActiveTab, toggleTheme, isDark, onOpenSettings, onLogout, recentChats]);
 
   const q = query.trim().toLowerCase();
   const filtered = q
@@ -88,7 +112,7 @@ export function CommandPalette({ isOpen, onClose, setActiveTab, user, onOpenSett
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="Search pages and actions…"
+                placeholder="Search pages, chats and actions…"
                 aria-label="Search commands"
                 role="combobox"
                 aria-expanded="true"

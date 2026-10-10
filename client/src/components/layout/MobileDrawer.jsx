@@ -28,12 +28,13 @@ export function MobileNav({ activeTab, setActiveTab, user, onLogout, onOpenSetti
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.tab)}
+                aria-label={item.short ? item.label : undefined}
                 aria-current={active ? 'page' : undefined}
                 className={`${tab} ${active ? 'text-fg' : 'text-fg-3 active:text-fg'}`}
               >
                 {active && <span aria-hidden className="absolute top-0 h-0.5 w-8 rounded-b-full bg-accent" />}
                 <Icon className="size-[21px]" strokeWidth={active ? 2.1 : 1.8} aria-hidden />
-                <span className={active ? 'font-semibold' : ''}>{item.label}</span>
+                <span className={`whitespace-nowrap ${active ? 'font-semibold' : ''}`}>{item.short || item.label}</span>
               </button>
             );
           })}

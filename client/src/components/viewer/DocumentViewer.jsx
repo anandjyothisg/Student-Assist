@@ -15,6 +15,7 @@ import { ErrorState } from '../ui/ErrorState';
 import { Skeleton } from '../ui/Skeleton';
 import { useRoute } from '../layout/useRoute';
 import { navigate, replaceParams } from '../layout/navConfig';
+import { forgetMaterial, rememberOpened } from '../home/recent';
 
 const NOTES_KEY = 'sources_notes';
 const LAST_COURSE_KEY = 'sources_course';
@@ -101,20 +102,23 @@ function Library({ onOpen, onNavigate }) {
   }, []);
   useEffect(() => { loadCourses(); }, [loadCourses]);
 
+  const courseSeq = useRef(0);
   const loadCourse = useCallback(async () => {
     if (!courseId) return;
+    const mine = ++courseSeq.current;
     setCourseState('loading');
     try {
       const [s, d] = await Promise.all([
         api.get(`/academic/courses/${courseId}/structure/`),
         api.get('/documents/', { params: { course: courseId, page_size: 100 } }),
       ]);
+      if (mine !== courseSeq.current) return; // the student switched course meanwhile
       setStructure(s.data);
       setDocs(d.data.results ?? d.data);
       setCourseState('ready');
       try { localStorage.setItem(LAST_COURSE_KEY, courseId); } catch { /* ignore */ }
     } catch {
-      setCourseState('error');
+      if (mine === courseSeq.current) setCourseState('error');
     }
   }, [courseId]);
   useEffect(() => { loadCourse(); }, [loadCourse]);
@@ -122,13 +126,14 @@ function Library({ onOpen, onNavigate }) {
   // Search across every enrolled course (debounced).
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) { setResults(null); return; }
+    if (q.length < 2) { setResults(null); return undefined; }
+    let active = true; // ignore replies for an older query
     const t = setTimeout(() => {
       api.get('/documents/', { params: { search: q, page_size: 50 } })
-        .then((r) => setResults(r.data.results ?? r.data))
-        .catch(() => setResults([]));
+        .then((r) => { if (active) setResults(r.data.results ?? r.data); })
+        .catch(() => { if (active) setResults([]); });
     }, 250);
-    return () => clearTimeout(t);
+    return () => { active = false; clearTimeout(t); };
   }, [query]);
 
   const course = courses.find((c) => c.id === courseId);
@@ -140,8 +145,8 @@ function Library({ onOpen, onNavigate }) {
       <div className="mx-auto w-full max-w-[1120px] px-4 pt-6 pb-14 sm:px-6 md:px-8 md:pt-8">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="hero-title text-[1.875rem] sm:text-[2.25rem]">Sources</h1>
-            <p className="mt-1.5 max-w-[58ch] text-sm text-fg-3">Course materials from your teachers, organised by unit and topic. Open one to read it with the copilot beside you.</p>
+            <h1 className="hero-title text-[1.875rem] sm:text-[2.25rem]">Study Materials</h1>
+            <p className="mt-1.5 max-w-[58ch] text-sm text-fg-3">Notes and files from your teachers, organised by topic. Open one to read it, and ask the AI about it as you go.</p>
           </div>
           {state === 'ready' && courses.length > 0 && (
             <SearchInput icon={Search} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search all your materials" aria-label="Search materials" className="w-full sm:w-72" />
@@ -296,7 +301,7 @@ function NotesPanel({ notes, page, onAdd, onDelete }) {
               <li key={n.id} className="group rounded-md border border-border bg-surface p-3">
                 <div className="mb-1 flex items-center justify-between">
                   <span className="font-mono text-[11px] text-accent">Page {n.page}</span>
-                  <IconButton icon={Trash2} label="Delete note" size="sm" onClick={() => onDelete(n.id)} className="!size-7 opacity-60 group-hover:opacity-100" />
+                  <IconButton icon={Trash2} label="Delete note" size="sm" onClick={() => onDelete(n.id)} className="opacity-60 group-hover:opacity-100 pointer-coarse:opacity-100" />
                 </div>
                 <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap text-fg">{n.text}</p>
               </li>
@@ -349,8 +354,11 @@ function Reader({ docId, initialPage, onBack }) {
       setDoc(detail.data);
       setChunks(Array.isArray(chunkRes.data) ? chunkRes.data : chunkRes.data.results ?? []);
       setState('ready');
+      rememberOpened(detail.data);
     } catch (err) {
-      setState(err.response?.status === 404 || err.response?.status === 403 ? 'missing' : 'error');
+      const missing = err.response?.status === 404 || err.response?.status === 403;
+      if (missing) forgetMaterial(docId);
+      setState(missing ? 'missing' : 'error');
     }
   }, [docId]);
   useEffect(() => { fetchDoc(); }, [fetchDoc]);
@@ -408,14 +416,14 @@ function Reader({ docId, initialPage, onBack }) {
   if (state === 'missing') {
     return (
       <div className="flex flex-1 items-center justify-center p-6">
-        <EmptyState icon={FileText} title="This document isn’t available" description="It may have been removed, or it belongs to a course you’re not enrolled in." action={<Button onClick={onBack} iconLeft={ArrowLeft}>Back to Sources</Button>} />
+        <EmptyState icon={FileText} title="This document isn’t available" description="It may have been removed, or it belongs to a course you’re not enrolled in." action={<Button onClick={onBack} iconLeft={ArrowLeft}>Back to Study Materials</Button>} />
       </div>
     );
   }
 
   const toolbar = (
     <div className="flex shrink-0 items-center gap-x-3 gap-y-2 border-b border-border bg-canvas px-3 py-2 sm:px-4">
-      <IconButton icon={ArrowLeft} label="Back to Sources" onClick={onBack} size="sm" />
+      <IconButton icon={ArrowLeft} label="Back to Study Materials" onClick={onBack} size="sm" />
       <div className="min-w-0 flex-1">
         {doc ? (
           <>
@@ -477,7 +485,7 @@ function Reader({ docId, initialPage, onBack }) {
         ) : state === 'error' ? (
           <ErrorState title="Couldn’t open this document" description="The connection dropped. Try again." onRetry={fetchDoc} />
         ) : chunks.length === 0 ? (
-          <EmptyState icon={FileText} title="No readable text" description="This document hasn’t been processed into text yet." />
+          <EmptyState icon={FileText} title="No readable text" description="This file has no text the app can read yet. Your teacher may need to upload it again." />
         ) : (
           <article className="mx-auto max-w-[700px] rounded-lg border border-border bg-surface px-6 py-8 shadow-sm sm:px-12 sm:py-12" style={{ fontSize: `${scale}rem` }}>
             <header className="mb-6 border-b border-border pb-4">
@@ -523,7 +531,7 @@ function Reader({ docId, initialPage, onBack }) {
         {toolbar}
         <PaneTabs value={pane} onChange={setPane} items={[
           { id: 'document', label: 'Document', icon: FileText },
-          { id: 'copilot', label: 'Copilot', icon: Sparkles },
+          { id: 'copilot', label: 'Ask AI', icon: Sparkles },
           { id: 'notes', label: 'Notes', icon: NotebookPen, count: notes.length },
         ]} />
         <div className="min-h-0 flex-1">
@@ -551,7 +559,7 @@ function Reader({ docId, initialPage, onBack }) {
         </div>
         <aside className="flex min-w-0 flex-1 flex-col bg-canvas">
           <PaneTabs value={sideTab} onChange={setSideTab} items={[
-            { id: 'copilot', label: 'Copilot', icon: Sparkles },
+            { id: 'copilot', label: 'Ask AI', icon: Sparkles },
             { id: 'notes', label: 'Notes', icon: NotebookPen, count: notes.length },
           ]} />
           <div className="min-h-0 flex-1">{sideTab === 'copilot' ? copilot : notesPanel}</div>

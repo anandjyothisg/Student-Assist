@@ -28,8 +28,8 @@ function CourseCard({ c, enrolled, busy, onEnroll, onLeave, onNavigate }) {
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-5">
         {enrolled ? (
           <>
-            <Button size="sm" iconLeft={BookOpen} onClick={() => { try { localStorage.setItem('sources_course', c.id); } catch { /* ignore */ } onNavigate?.('documents'); }}>Open materials</Button>
-            <Button size="sm" variant="ghost" iconLeft={MessageCircle} onClick={() => onNavigate?.('assistant')}>Ask</Button>
+            <Button size="sm" iconLeft={BookOpen} onClick={() => { try { localStorage.setItem('sources_course', c.id); } catch { /* ignore */ } onNavigate?.('documents'); }}>Study materials</Button>
+            <Button size="sm" variant="ghost" iconLeft={MessageCircle} onClick={() => onNavigate?.('assistant', { course: c.id })}>Ask AI</Button>
             <IconButton icon={LogOut} label={`Leave ${c.title}`} size="sm" onClick={() => onLeave(c)} className="ml-auto" />
           </>
         ) : c.enrollment_open ? (
@@ -103,8 +103,8 @@ export function CoursesPage({ onNavigate }) {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title="Courses"
-        description="Your enrolled courses and everything else on offer this term. The assistant searches the materials of courses you’re enrolled in."
+        title="My Courses"
+        description="The courses you’re in, and others you can join. The AI Assistant answers from the materials of the courses you’re in."
         actions={state === 'ready' && <SearchInput icon={Search} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a course" aria-label="Find a course" className="w-full sm:w-64" />}
       />
 
@@ -116,7 +116,7 @@ export function CoursesPage({ onNavigate }) {
         <>
           <section aria-labelledby="mine-h">
             <div className="mb-3 flex items-baseline justify-between">
-              <h2 id="mine-h" className="text-[15px] font-semibold text-fg">Enrolled <span className="ml-1 text-fg-3 tabular">{enrolledIds.size}</span></h2>
+              <h2 id="mine-h" className="text-[15px] font-semibold text-fg">Your courses <span className="ml-1 text-fg-3 tabular">{enrolledIds.size}</span></h2>
             </div>
             {mine.length ? (
               <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -130,7 +130,7 @@ export function CoursesPage({ onNavigate }) {
           </section>
 
           <section aria-labelledby="avail-h">
-            <h2 id="avail-h" className="mb-3 text-[15px] font-semibold text-fg">Available <span className="ml-1 text-fg-3 tabular">{available.length}</span></h2>
+            <h2 id="avail-h" className="mb-3 text-[15px] font-semibold text-fg">Courses you can join <span className="ml-1 text-fg-3 tabular">{available.length}</span></h2>
             {available.length ? (
               <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {available.map((c) => <CourseCard key={c.id} c={c} busy={busyId === c.id} onEnroll={enroll} />)}

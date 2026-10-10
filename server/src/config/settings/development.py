@@ -3,6 +3,8 @@ SmartStudent AI — Development Settings
 Extends base settings with SQLite, debug tools, and relaxed security.
 """
 
+import os
+
 from .base import *  # noqa: F401, F403
 
 # ---------------------------------------------------------------------------
@@ -32,7 +34,8 @@ ENABLE_API_DOCS = env_flag("ENABLE_API_DOCS", True)  # noqa: F405
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",  # noqa: F405
+        # SQLITE_PATH lets a restored backup be opened without touching the live file.
+        "NAME": os.environ.get("SQLITE_PATH") or BASE_DIR / "db.sqlite3",  # noqa: F405
     }
 }
 

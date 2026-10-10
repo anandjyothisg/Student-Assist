@@ -18,7 +18,7 @@ import json
 from collections import Counter, defaultdict
 from datetime import timedelta
 
-from django.db.models import Count
+from django.db.models import Count, OuterRef, Subquery
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
@@ -121,7 +121,13 @@ class ChatSessionViewSet(
         qs = (
             ChatSession.objects.filter(student=self.request.user, is_active=True)
             .select_related("course")
-            .annotate(message_count=Count("messages"))
+            .annotate(
+                message_count=Count("messages"),
+                # Latest message text in the same query (avoids one query per session).
+                last_content=Subquery(
+                    ChatMessage.objects.filter(session=OuterRef("pk")).order_by("-created_at").values("content")[:1]
+                ),
+            )
             .order_by("-updated_at")
         )
         course = parse_uuid_param(self.request.query_params.get("course"), "course")
@@ -188,6 +194,30 @@ class SavedAnswerViewSet(
 # ---------------------------------------------------------------------------
 
 
+def _platform_counts() -> dict:
+    """Aggregate counts for the admin status page (a few GROUP BYs, not full lists)."""
+    from apps.accounts.models import User
+    from apps.documents.models import DocumentStatus
+
+    by_role = dict(User.objects.filter(is_active=True).values_list("role").annotate(n=Count("id")))
+    docs = Document.objects.filter(is_latest=True)
+    by_status = dict(docs.values_list("processing_status").annotate(n=Count("id")))
+    attention = list(
+        Document.objects.filter(processing_status__in=[DocumentStatus.FAILED, DocumentStatus.PENDING])
+        .select_related("course").order_by("-updated_at")[:5]
+        .values("id", "title", "processing_status", "course__code")
+    )
+    return {
+        "users": {"total": sum(by_role.values()), "by_role": by_role},
+        "courses": {"total": Course.objects.count(), "published": Course.objects.filter(is_published=True).count()},
+        "documents": {"total": docs.count(), "by_status": by_status},
+        "attention": [
+            {"id": str(a["id"]), "title": a["title"], "processing_status": a["processing_status"], "course_code": a["course__code"]}
+            for a in attention
+        ],
+    }
+
+
 class AiHealthView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -215,6 +245,7 @@ class AiHealthView(APIView):
                 logger.exception("Vector store stats failed")
                 vectors = {"collections": 0, "vectors": 0, "error": "The vector store couldn't be read. See the server log."}
             data["vector_store"] = vectors
+            data["counts"] = _platform_counts()
             data["embedding_model"] = settings.EMBEDDING_MODEL_NAME
             data["retrieval"] = {"top_k": settings.RAG_TOP_K_RESULTS, "max_distance": settings.RAG_MAX_DISTANCE}
         return Response(data)
@@ -272,18 +303,22 @@ class AiInsightsView(APIView):
             cited it and the student is still enrolled. Sessions the student
             deleted are never counted.
             """
+            window = {"created_at__gte": start}
+            if end is not None:  # the current period is open-ended (no clock-tick edge cases)
+                window["created_at__lt"] = end
             assistants = (
                 ChatMessage.objects.filter(
-                    role="assistant", created_at__gte=start, created_at__lt=end,
-                    session__student__role="student", session__is_active=True,
+                    role="assistant", session__student__role="student", session__is_active=True, **window
                 )
                 .select_related("session")
                 .order_by("created_at")
             )
             user_msgs = defaultdict(list)
+            user_window = {"created_at__gte": start - timedelta(minutes=10)}
+            if end is not None:
+                user_window["created_at__lt"] = end
             for m in ChatMessage.objects.filter(
-                role="user", created_at__gte=start - timedelta(minutes=10), created_at__lt=end,
-                session__student__role="student", session__is_active=True,
+                role="user", session__student__role="student", session__is_active=True, **user_window
             ).order_by("created_at"):
                 user_msgs[m.session_id].append(m)
 
@@ -306,8 +341,7 @@ class AiInsightsView(APIView):
                 out.append((label, a.session.student_id, a.created_at, a.status, q_text))
             return out
 
-        now = timezone.now()
-        rows = collect(since, now)
+        rows = collect(since, None)
         total = len(rows)
         answered = sum(1 for r in rows if r[3] == AnswerStatus.ANSWERED)
         not_found = sum(1 for r in rows if r[3] == AnswerStatus.NOT_FOUND)

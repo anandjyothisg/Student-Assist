@@ -6,14 +6,15 @@ import { IconButton } from '../ui/Button';
 import { BrandMark } from '../ui/BrandMark';
 
 const TAB_TITLES = {
-  assistant: 'Ask',
-  documents: 'Sources',
+  home: 'Home',
+  assistant: 'AI Assistant',
+  documents: 'Study Materials',
   notebook: 'Notebook',
-  academic: 'Content',
-  analytics: 'Insights',
-  dashboard: 'Status',
+  academic: 'Courses',
+  analytics: 'Class Insights',
+  dashboard: 'System Status',
   accounts: 'Users',
-  courses: 'Courses',
+  courses: 'My Courses',
 };
 
 export function TopNav({ activeTab, user, onOpenCommandPalette, onOpenSettings }) {

@@ -28,111 +28,94 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Flag to prevent infinite refresh loops
-let isRefreshing = false;
-let failedQueue = [];
-
-const processQueue = (error, token = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
-
-// Response interceptor to handle auto token refresh on 401 Unauthorized
+// Auto-refresh on 401. Every client (this one, rootApi and streamChat) shares
+// one in-flight refresh: refresh tokens rotate and the old one is blacklisted,
+// so two parallel refreshes would sign a valid session out.
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return api(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
-      }
-
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        isRefreshing = false;
+    const original = error.config;
+    const isRefreshCall = original?.url?.includes('/auth/token/refresh/');
+    if (error.response?.status === 401 && original && !original._retry && !isRefreshCall) {
+      if (!localStorage.getItem('refreshToken')) {
         if (localStorage.getItem('accessToken')) {
           localStorage.removeItem('accessToken');
           window.dispatchEvent(new Event('auth-expired'));
         }
         return Promise.reject(error);
       }
-
-      try {
-        const res = await axios.post(`${API_BASE}/api/v1/auth/token/refresh/`, {
-          refresh: refreshToken,
-        });
-
-        const newAccess = res.data.access;
-        localStorage.setItem('accessToken', newAccess);
-
-        if (res.data.refresh) {
-          localStorage.setItem('refreshToken', res.data.refresh);
-        }
-
-        api.defaults.headers.common['Authorization'] = `Bearer ${newAccess}`;
-        originalRequest.headers.Authorization = `Bearer ${newAccess}`;
-
-        processQueue(null, newAccess);
-        isRefreshing = false;
-        return api(originalRequest);
-      } catch (refreshError) {
-        processQueue(refreshError, null);
-        isRefreshing = false;
-
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-
-        // Fire custom event to notify App layout to redirect to auth
-        window.dispatchEvent(new Event('auth-expired'));
-
-        return Promise.reject(refreshError);
-      }
+      original._retry = true;
+      const token = await refreshAccessToken();
+      original.headers.Authorization = `Bearer ${token}`;
+      return api(original);
     }
-
     return Promise.reject(error);
   }
 );
 
-// Helper to format backend REST validation errors into user-friendly strings
+// Turn any API failure into one plain sentence a student can act on.
+// Field errors use readable labels ("Email: …") instead of raw field names,
+// and server-side crashes never show internal text.
+const FIELD_LABELS = {
+  email: 'Email',
+  password: 'Password',
+  confirm_password: 'Confirm password',
+  new_password: 'New password',
+  old_password: 'Current password',
+  current_password: 'Current password',
+  first_name: 'First name',
+  last_name: 'Last name',
+  full_name: 'Name',
+  otp: 'Code',
+  code: 'Code',
+  student_number: 'Student number',
+  year_of_study: 'Year',
+  file: 'File',
+  title: 'Title',
+  name: 'Name',
+  role: 'Role',
+};
+const fieldLabel = (f) => FIELD_LABELS[f] || f.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+const firstMsg = (v) => (Array.isArray(v) ? v.map(String).join(' ') : typeof v === 'object' && v ? Object.values(v).map(firstMsg).join(' ') : String(v));
+const TECHNICAL = /token|traceback|exception|errno|stack|sql|null value|integrity|<html/i;
+
+export const NETWORK_ERROR = 'Can’t reach the server. Check your connection and try again.';
+export const SERVER_ERROR = 'Something went wrong on our side. Try again in a moment.';
+export const RATE_LIMIT_ERROR = 'Too many requests. Wait a moment and try again.';
+
 export const extractErrorMessage = (err) => {
-  if (err.response?.data) {
-    const data = err.response.data;
-    if (typeof data === 'string') return data;
-    if (data.detail) return data.detail;
-    if (data.error?.message) return data.error.message;
-    if (data.non_field_errors) {
-      return Array.isArray(data.non_field_errors)
-        ? data.non_field_errors.join(' ')
-        : String(data.non_field_errors);
-    }
-    const fieldMsgs = Object.entries(data)
-      .filter(([k]) => k !== 'success')
-      .map(([field, msgs]) => {
-        const fieldName = field.replace(/_/g, ' ');
-        const messageStr = Array.isArray(msgs) ? msgs.join(', ') : String(msgs);
-        return `${fieldName}: ${messageStr}`;
-      })
-      .join(' | ');
-    if (fieldMsgs) return fieldMsgs;
+  if (!err?.response) {
+    if (err?.message && !/network|failed to fetch|timeout/i.test(err.message)) return err.message;
+    return NETWORK_ERROR;
   }
-  return err.message || 'An error occurred.';
+  const { status, data } = err.response;
+  if (status === 429) return RATE_LIMIT_ERROR;
+  if (status === 500 || status === 502 || status === 504) return SERVER_ERROR;
+
+  let message = '';
+  if (data && typeof data === 'object') {
+    // Our API: { success: false, error: { message, details } }; plain DRF otherwise.
+    const details = data.error?.details ?? (data.error ? null : data);
+    if (details && typeof details === 'object' && !Array.isArray(details)) {
+      message = Object.entries(details)
+        .filter(([k]) => k !== 'success' && k !== 'code')
+        .map(([k, v]) => (k === 'detail' || k === 'non_field_errors' ? firstMsg(v) : `${fieldLabel(k)}: ${firstMsg(v)}`))
+        .join(' ');
+    }
+    if (!message) message = data.error?.message || data.detail || '';
+  } else if (typeof data === 'string' && data.length < 200 && !/<html/i.test(data)) {
+    message = data;
+  }
+
+  if (!message || TECHNICAL.test(message)) {
+    if (status === 401) return 'Your session expired. Please sign in again.';
+    if (status === 403) return 'You don’t have access to that.';
+    if (status === 404) return 'We couldn’t find that. It may have been moved or deleted.';
+    if (status >= 500) return SERVER_ERROR;
+    return 'That didn’t work. Check the details and try again.';
+  }
+  if (status === 403 && /permission to perform this action/i.test(message)) return 'You don’t have access to that.';
+  return message;
 };
 
 // Auth API — all methods call the real backend
@@ -266,9 +249,13 @@ export function refreshAccessToken() {
       return res.data.access;
     })
     .catch((err) => {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      window.dispatchEvent(new Event('auth-expired'));
+      // Only a rejected refresh token ends the session; a network blip must not.
+      if (err.response && [400, 401, 403].includes(err.response.status)) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        window.dispatchEvent(new Event('auth-expired'));
+        err.sessionExpired = true;
+      }
       throw err;
     })
     .finally(() => { refreshPromise = null; });
@@ -318,16 +305,16 @@ export async function streamChat({ question, courseId, sessionId, signal }, { on
     }
   } catch (err) {
     if (err.name === 'AbortError') throw err;
-    throw new Error('Can’t reach the server. Check that the backend is running and try again.');
+    if (err.sessionExpired) throw new Error('Your session expired. Please sign in again.');
+    throw new Error(NETWORK_ERROR);
   }
 
   if (!res.ok) {
-    let detail = `The assistant returned an error (${res.status}).`;
-    try {
-      const data = await res.json();
-      detail = extractErrorMessage({ response: { data } }) || detail;
-    } catch { /* not JSON */ }
-    if (res.status === 429) detail = 'You’re asking very quickly — wait a few seconds and try again.';
+    let data = null;
+    try { data = await res.json(); } catch { /* not JSON */ }
+    const detail = res.status === 429
+      ? 'You’re asking very quickly. Wait a few seconds and try again.'
+      : extractErrorMessage({ response: { status: res.status, data } });
     throw new Error(detail);
   }
 
@@ -335,8 +322,14 @@ export async function streamChat({ question, courseId, sessionId, signal }, { on
   const decoder = new TextDecoder();
   let buffer = '';
   let final = null;
+  // If the server goes silent mid-answer (no bytes for 90 s), stop waiting.
+  const IDLE_MS = 90000;
   for (;;) {
-    const { value, done } = await reader.read();
+    let idle;
+    const { value, done } = await Promise.race([
+      reader.read(),
+      new Promise((_, reject) => { idle = setTimeout(() => reject(new Error('The assistant stopped responding. Please try again.')), IDLE_MS); }),
+    ]).finally(() => clearTimeout(idle)).catch((err) => { reader.cancel().catch(() => {}); throw err; });
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     let idx;
@@ -350,7 +343,7 @@ export async function streamChat({ question, courseId, sessionId, signal }, { on
       if (event === 'meta') onMeta?.(data);
       else if (event === 'token') onToken?.(data.text);
       else if (event === 'done') { final = data; onDone?.(data); }
-      else if (event === 'error') throw new Error(data.detail || 'The assistant failed to answer.');
+      else if (event === 'error') throw new Error(data.detail || 'The AI couldn’t finish this answer. Try again.');
     }
   }
   if (!final) throw new Error('The answer was interrupted. Please try again.');

@@ -55,6 +55,7 @@ export function ResetPassword({ onNavigate, email = '', otp = '' }) {
             size="lg"
             revealable
             autoComplete="new-password"
+            aria-describedby="reset-pw-rules"
             error={errors.password?.message}
             {...register('password', {
               required: 'Create a new password.',
@@ -62,7 +63,7 @@ export function ResetPassword({ onNavigate, email = '', otp = '' }) {
               pattern: { value: STRONG_PASSWORD, message: 'Include upper and lowercase letters and a number.' },
             })}
           />
-          <PasswordChecklist value={passwordVal} />
+          <PasswordChecklist id="reset-pw-rules" value={passwordVal} />
         </div>
         <Input
           label="Confirm new password"

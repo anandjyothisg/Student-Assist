@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion';
 import {
   AlertTriangle, ArrowUpRight, Bookmark, BookmarkCheck, Check, ChevronDown, Copy, ExternalLink, FileText,
-  History, Info, MessageSquarePlus, Pencil, SearchX, Trash2, X,
+  History, Info, MessageSquarePlus, Pencil, SearchX, Trash2,
 } from 'lucide-react';
 import api, { chatApi, extractErrorMessage, streamChat } from '../auth/api';
 import { useToast } from '../ui/Toast';
@@ -57,10 +57,10 @@ function ConversationList({ sessions, state, activeId, onSelect, onRename, onDel
     return <div className="flex flex-col gap-2 p-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9" />)}</div>;
   }
   if (!sessions.length) {
-    return <p className="px-4 py-6 text-[13px] leading-relaxed text-fg-3">Your conversations will appear here.</p>;
+    return <p className="px-4 py-6 text-[13px] leading-relaxed text-fg-3">No chats yet. Your chats will appear here.</p>;
   }
   return (
-    <nav aria-label="Conversations" className="flex flex-col gap-4 p-2">
+    <nav aria-label="Chat history" className="flex flex-col gap-4 p-2">
       {groupSessions(sessions).map(([label, items]) => (
         <div key={label}>
           <p className="px-2.5 pb-1 text-[11.5px] font-medium text-fg-3">{label}</p>
@@ -80,7 +80,7 @@ function ConversationList({ sessions, state, activeId, onSelect, onRename, onDel
                         onChange={(e) => setTitle(e.target.value)}
                         onBlur={() => setEditing(null)}
                         onKeyDown={(e) => e.key === 'Escape' && setEditing(null)}
-                        aria-label="Conversation title"
+                        aria-label="Chat name"
                         className="field-control !min-h-9 !py-1.5 text-[13px]"
                       />
                     </form>
@@ -91,12 +91,12 @@ function ConversationList({ sessions, state, activeId, onSelect, onRename, onDel
                         aria-current={active ? 'true' : undefined}
                         className={`flex w-full flex-col items-start rounded-md px-2.5 py-2 pr-16 text-left transition-colors ${active ? 'bg-subtle' : 'hover:bg-subtle/70'}`}
                       >
-                        <span className={`w-full truncate text-[13.5px] ${active ? 'font-semibold text-fg' : 'text-fg-2'}`}>{s.title || 'Untitled'}</span>
-                        <span className="mt-0.5 font-mono text-[11px] text-fg-3">{s.course_code || 'All courses'}</span>
+                        <span className={`w-full truncate text-[13.5px] ${active ? 'font-semibold text-fg' : 'text-fg-2'}`}>{s.title || 'Untitled chat'}</span>
+                        <span className="mt-0.5 font-mono text-[11px] text-fg-3">{s.course_code || 'All my courses'}</span>
                       </button>
                       <div className="absolute top-1.5 right-1 flex opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-lg:opacity-100">
-                        <IconButton icon={Pencil} label="Rename" size="sm" className="!size-7" onClick={() => { setEditing(s.id); setTitle(s.title); }} />
-                        <IconButton icon={Trash2} label="Delete conversation" size="sm" className="!size-7 hover:!text-error" onClick={() => onDelete(s)} />
+                        <IconButton icon={Pencil} label="Rename chat" size="sm" onClick={() => { setEditing(s.id); setTitle(s.title); }} />
+                        <IconButton icon={Trash2} label="Delete chat" size="sm" className="hover:!text-error" onClick={() => onDelete(s)} />
                       </div>
                     </>
                   )}
@@ -116,18 +116,18 @@ function ScopePicker({ courses, value, onChange, locked }) {
   if (locked) {
     return (
       <span className="inline-flex h-8 items-center gap-2 rounded-md bg-subtle px-2.5 text-[13px] text-fg-2">
-        <span className="text-fg-3">Searching</span>
+        <span className="text-fg-3">Asking about</span>
         <span className="font-medium text-fg">{current ? current.code : 'All my courses'}</span>
       </span>
     );
   }
   return (
-    <label className="relative inline-flex h-8 items-center">
-      <span className="sr-only">Search scope</span>
+    <label className="relative inline-flex h-9 items-center" title="Choose which course the AI answers from">
+      <span className="sr-only">Ask about</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-8 max-w-[15rem] appearance-none truncate rounded-md border border-border bg-surface py-0 pr-8 pl-2.5 text-[13px] font-medium text-fg transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-accent"
+        className="h-9 max-w-[15rem] appearance-none truncate rounded-md border border-border bg-surface py-0 pr-8 pl-2.5 text-[13px] font-medium text-fg transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-accent"
       >
         <option value="">All my courses</option>
         {courses.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.title}</option>)}
@@ -174,7 +174,12 @@ function Answer({ msg, onCite, onRetry }) {
   // Final answers flag which passages they actually cite; older answers have no flag.
   const sources = all.filter((c) => c.cited !== false);
   const alsoRetrieved = all.filter((c) => c.cited === false);
-  const sourcesLabel = offline ? 'Matching passages' : sources.length ? 'Sources' : null;
+  const matchedByWording = sources.some((c) => c.attributed);
+  const sourcesLabel = offline
+    ? 'Matching parts of your materials'
+    : sources.length
+      ? (matchedByWording ? 'Sources (matched by wording; the AI didn’t point to them itself)' : 'Sources')
+      : null;
 
   const save = async () => {
     setSaving(true);
@@ -208,14 +213,14 @@ function Answer({ msg, onCite, onRetry }) {
         ) : msg.streaming && !msg.content ? (
           <div className="flex items-center gap-2.5 py-1 text-[13px] text-fg-3" role="status">
             <span className="ai-thinking-line !w-12" />
-            {msg.citations?.length ? `Reading ${msg.citations.length} passages from your materials…` : 'Searching your course materials…'}
+            {msg.citations?.length ? 'Thinking… reading your course materials' : 'Looking through your course materials…'}
           </div>
         ) : (
           <>
             {offline && (
               <div className="mb-3 flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning-dim px-3.5 py-2.5 text-[13px] text-fg-2">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-                The AI model is offline — showing matching passages instead of a written answer.
+                The AI is offline right now, so here are the matching parts of your materials instead of a written answer.
               </div>
             )}
             <Markdown onCite={(n) => onCite(byIndex(n))} isCiteValid={(n) => !!byIndex(n)}>{offline ? msg.content.split('\n').slice(1).join('\n') : msg.content}</Markdown>
@@ -232,12 +237,12 @@ function Answer({ msg, onCite, onRetry }) {
               </>
             )}
             {!offline && !sources.length && (
-              <p className="mb-2 text-xs text-fg-3">This answer didn’t cite specific passages. Check it against the retrieved material below.</p>
+              <p className="mb-2 text-xs text-fg-3">This answer doesn’t point to a specific page. Check it against the materials below.</p>
             )}
             {alsoRetrieved.length > 0 && (
               sources.length ? (
                 <details className="mt-3 text-xs text-fg-3">
-                  <summary className="cursor-pointer select-none font-medium hover:text-fg-2">Also retrieved, not cited ({alsoRetrieved.length})</summary>
+                  <summary className="cursor-pointer select-none font-medium hover:text-fg-2">Also found, not used in the answer ({alsoRetrieved.length})</summary>
                   <div className="mt-2"><SourceList items={alsoRetrieved} onCite={onCite} muted /></div>
                 </details>
               ) : (
@@ -256,7 +261,7 @@ function Answer({ msg, onCite, onRetry }) {
               {copied ? <Check className="size-3.5 text-success" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
               {copied ? 'Copied' : 'Copy'}
             </button>
-            {msg.status === 'answered' && msg.id && (
+            {msg.status === 'answered' && msg.id && !String(msg.id).startsWith('pending-') && (
               <button
                 onClick={save}
                 disabled={saved || saving}
@@ -296,6 +301,9 @@ export function AskScreen({ user, onNavigate }) {
   const scrollRef = useRef(null);
   const composerRef = useRef(null);
   const abortRef = useRef(null);
+  const busyRef = useRef(false); // guards double submits within one render
+  // Leaving the screen stops an answer that is still streaming.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -311,6 +319,21 @@ export function AskScreen({ user, onNavigate }) {
     api.get('/ai/health/').then((r) => setHealth(r.data)).catch(() => setHealth(null));
     refreshSessions();
   }, [refreshSessions]);
+
+  // Home and My Courses can open this screen with a question (?q=) and/or a
+  // course (?course=). The question is asked once, then removed from the URL.
+  const startedFromLink = useRef(false);
+  useEffect(() => {
+    const { q, course } = route.params;
+    if (sessionParam || startedFromLink.current || (!q && !course)) return;
+    if (course && scopeCourses.length === 0) return; // wait until the course list has loaded
+    startedFromLink.current = true;
+    const known = course && scopeCourses.some((c) => c.id === course);
+    if (known) setScope(course);
+    replaceParams({});
+    if (q) setTimeout(() => ask(q, known ? course : undefined), 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params.q, route.params.course, scopeCourses]);
 
   // Open the conversation named in the URL (also on refresh / back-forward).
   useEffect(() => {
@@ -330,7 +353,7 @@ export function AskScreen({ user, onNavigate }) {
       })
       .catch(() => {
         if (cancelled) return;
-        toast.error('That conversation is no longer available.');
+        toast.error('That chat is no longer available.');
         replaceParams({});
       })
       .finally(() => !cancelled && setLoadingSession(false));
@@ -353,9 +376,11 @@ export function AskScreen({ user, onNavigate }) {
     setTimeout(() => composerRef.current?.focus(), 50);
   };
 
-  const ask = async (text) => {
+  const ask = async (text, scopeOverride) => {
     const q = (text ?? query).trim();
-    if (!q || busy) return;
+    const askScope = scopeOverride ?? scope;
+    if (!q || busy || busyRef.current) return;
+    busyRef.current = true;
     setQuery('');
     setBusy(true);
     const tempId = `pending-${Date.now()}`;
@@ -366,12 +391,12 @@ export function AskScreen({ user, onNavigate }) {
 
     try {
       const final = await streamChat(
-        { question: q, courseId: session ? null : scope || null, sessionId: session?.id, signal: controller.signal },
+        { question: q, courseId: session ? null : askScope || null, sessionId: session?.id, signal: controller.signal },
         {
           onMeta: (meta) => {
             patch(() => ({ citations: meta.citations }));
             if (!session) {
-              setSession({ id: meta.session_id, title: meta.session_title, course: scope || null, course_code: scopeCourses.find((c) => c.id === scope)?.code });
+              setSession({ id: meta.session_id, title: meta.session_title, course: askScope || null, course_code: scopeCourses.find((c) => c.id === askScope)?.code });
               replaceParams({ session: meta.session_id });
             }
           },
@@ -384,11 +409,19 @@ export function AskScreen({ user, onNavigate }) {
       refreshSessions();
     } catch (err) {
       if (err.name === 'AbortError') {
-        patch((x) => ({ streaming: false, status: 'answered', content: x.content || '_Stopped._' }));
+        // The server keeps the partial answer; it can't be saved from here
+        // because it has no final message id yet.
+        patch((x) => ({ streaming: false, status: 'stopped', content: x.content ? `${x.content}
+
+_Stopped._` : '_Stopped._' }));
+        refreshSessions();
       } else {
         patch(() => ({ streaming: false, error: err.message, question: q }));
+        // Keep what the student typed so they don't have to retype it.
+        setQuery((cur) => cur || q);
       }
     } finally {
+      busyRef.current = false;
       setBusy(false);
       abortRef.current = null;
       composerRef.current?.focus({ preventScroll: true });
@@ -418,7 +451,7 @@ export function AskScreen({ user, onNavigate }) {
       await chatApi.remove(s.id);
       setSessions((list) => list.filter((x) => x.id !== s.id));
       if (session?.id === s.id) newChat();
-      toast.success('Conversation deleted.');
+      toast.success('Chat deleted.');
     } catch (err) { toast.error(extractErrorMessage(err)); }
   };
 
@@ -429,8 +462,12 @@ export function AskScreen({ user, onNavigate }) {
 
   const suggestions = useMemo(() => {
     const pool = scope ? scopeCourses.filter((c) => c.id === scope) : scopeCourses;
-    const list = pool.map((c) => SUGGESTIONS[c.code]).filter(Boolean);
-    return list.slice(0, 3);
+    const list = pool.map((c) => SUGGESTIONS[c.code] || `Explain the main ideas of ${c.title} simply.`);
+    if (pool.length === 1) {
+      const c = pool[0];
+      list.push(`Give me three practice questions on ${c.title}.`, `What should I revise first for ${c.title}?`);
+    }
+    return [...new Set(list)].slice(0, 3);
   }, [scopeCourses, scope]);
 
   const active = messages.length > 0 || loadingSession;
@@ -455,16 +492,17 @@ export function AskScreen({ user, onNavigate }) {
       value={query}
       onChange={setQuery}
       onSubmit={() => ask()}
+      onStop={() => abortRef.current?.abort()}
       loading={busy}
       size={active ? 'md' : 'lg'}
       minRows={active ? 1 : 2}
       autoFocus={!active}
       placeholder={active ? 'Ask a follow-up…' : 'Ask anything about your course materials…'}
-      label="Ask a question"
+      label="Your question"
       footer={active ? null : (
         <>
           <span className="hidden sm:inline"><kbd className="keycap">Enter</kbd> to send · <kbd className="keycap">Shift</kbd> + <kbd className="keycap">Enter</kbd> for a new line</span>
-          <span>Answers cite your materials</span>
+          <span>Answers show where they came from</span>
         </>
       )}
     />
@@ -473,9 +511,9 @@ export function AskScreen({ user, onNavigate }) {
   return (
     <div className="flex min-h-0 flex-1">
       {isDesktop && (
-        <aside className="flex w-[272px] shrink-0 flex-col border-r border-border bg-canvas" aria-label="Conversation history">
+        <aside className="flex w-[272px] shrink-0 flex-col border-r border-border bg-canvas" aria-label="Chat history">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2.5">
-            <span className="px-1 text-[13px] font-semibold text-fg">Conversations</span>
+            <span className="px-1 text-[13px] font-semibold text-fg">Chat history</span>
             <Button size="sm" variant="secondary" iconLeft={MessageSquarePlus} onClick={newChat}>New chat</Button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">{historyList}</div>
@@ -485,11 +523,11 @@ export function AskScreen({ user, onNavigate }) {
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Toolbar */}
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 sm:px-4">
-          {!isDesktop && <IconButton icon={History} label="Conversation history" size="sm" onClick={() => setHistoryOpen(true)} />}
+          {!isDesktop && <Button size="sm" variant="secondary" iconLeft={History} onClick={() => setHistoryOpen(true)}>Chats</Button>}
           <ScopePicker courses={scopeCourses} value={scope} onChange={setScope} locked={!!session} />
           {session && <span className="hidden min-w-0 truncate text-[13px] text-fg-3 md:inline">{session.title}</span>}
           <div className="ml-auto flex items-center gap-1">
-            {active && <Button size="sm" variant="ghost" iconLeft={MessageSquarePlus} onClick={newChat} className="lg:hidden">New</Button>}
+            {active && <Button size="sm" variant="ghost" iconLeft={MessageSquarePlus} onClick={newChat} className="lg:hidden">New chat</Button>}
           </div>
         </div>
 
@@ -497,8 +535,8 @@ export function AskScreen({ user, onNavigate }) {
           <div role="status" className="flex shrink-0 items-start gap-2.5 border-b border-warning/25 bg-warning-dim px-4 py-2.5 text-[13px] text-fg-2">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
             <span>
-              <strong className="font-semibold text-fg">The AI model is offline.</strong>{' '}
-              You can still search your materials — answers will show matching passages until it’s back.
+              <strong className="font-semibold text-fg">The AI is offline right now.</strong>{' '}
+              You can still ask: you’ll see the matching parts of your materials until it’s back.
             </span>
           </div>
         )}
@@ -510,16 +548,16 @@ export function AskScreen({ user, onNavigate }) {
                 <h1 className="hero-title text-[2.25rem] sm:text-[3rem]">{greeting()}, {firstName}.</h1>
                 <p className="mx-auto mt-3 max-w-[48ch] text-[15px] leading-relaxed text-fg-3">
                   {user?.role === 'student'
-                    ? 'Ask about anything in your enrolled courses. Every answer points back to the page it came from.'
+                    ? 'Ask anything about your courses. Every answer shows the page it came from.'
                     : user?.role === 'teacher'
-                      ? 'Check how the assistant answers from your course materials — the same way your students see it.'
-                      : 'Query the full course library to verify answers and sources across every course.'}
+                      ? 'See how the assistant answers from your course materials, the same way your students do.'
+                      : 'Ask across every course to check answers and their sources.'}
                 </p>
               </motion.div>
 
               {noCourses && user?.role === 'student' ? (
                 <div className="rounded-lg border border-dashed border-border-strong p-6 text-center">
-                  <p className="text-[14px] text-fg-2">You aren’t enrolled in any courses yet, so there’s nothing for the assistant to search.</p>
+                  <p className="text-[14px] text-fg-2">Join a course first. The AI answers from the materials of the courses you’re in.</p>
                   <Button className="mt-4" onClick={() => onNavigate?.('courses')}>Browse courses</Button>
                 </div>
               ) : (
@@ -530,7 +568,7 @@ export function AskScreen({ user, onNavigate }) {
 
               {suggestions.length > 0 && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.14, duration: 0.3 }} className="mt-8">
-                  <p className="mb-2 px-1 text-xs font-medium text-fg-3">Try asking</p>
+                  <p className="mb-2 px-1 text-xs font-medium text-fg-3">Not sure where to start? Try one of these</p>
                   <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface/60">
                     {suggestions.map((s) => (
                       <li key={s}>
@@ -567,12 +605,7 @@ export function AskScreen({ user, onNavigate }) {
               <div className="mx-auto w-full max-w-[740px]">
                 {composer}
                 <div className="mt-2 flex items-center justify-between gap-3 px-1 text-xs text-fg-3">
-                  <span className="truncate"><span className="hidden sm:inline">Answers come only from course materials and can still be wrong — </span>Check the sources before relying on an answer.</span>
-                  {busy && (
-                    <button onClick={() => abortRef.current?.abort()} className="inline-flex shrink-0 items-center gap-1 rounded-sm font-medium transition-colors hover:text-fg">
-                      <X className="size-3.5" aria-hidden /> Stop
-                    </button>
-                  )}
+                  <span className="truncate"><span className="hidden sm:inline">Answers come only from your course materials but can still be wrong. </span>Check the sources before relying on an answer.</span>
                 </div>
               </div>
             </div>
@@ -581,7 +614,7 @@ export function AskScreen({ user, onNavigate }) {
       </div>
 
       {!isDesktop && (
-        <Sheet isOpen={historyOpen} onClose={() => setHistoryOpen(false)} title="Conversations" side="left">
+        <Sheet isOpen={historyOpen} onClose={() => setHistoryOpen(false)} title="Chat history" side="left">
           <div className="border-b border-border p-3">
             <Button fullWidth iconLeft={MessageSquarePlus} onClick={newChat}>New chat</Button>
           </div>
@@ -603,23 +636,26 @@ export function AskScreen({ user, onNavigate }) {
               </div>
             </div>
             <figure>
-              <figcaption className="mb-2 text-xs font-medium text-fg-3">Passage used in the answer</figcaption>
+              <figcaption className="mb-2 text-xs font-medium text-fg-3">From the document</figcaption>
               <blockquote className="rounded-md border-l-2 border-accent bg-subtle px-4 py-3 text-[14px] leading-relaxed whitespace-pre-line text-fg-2">{citation.excerpt}</blockquote>
             </figure>
             {typeof citation.score === 'number' && (
-              <div>
-                <div className="mb-1.5 flex items-center justify-between text-xs text-fg-3">
-                  <span className="inline-flex items-center gap-1">Match strength <Info className="size-3" aria-hidden /></span>
-                  <span className="font-mono tabular text-fg-2">{Math.round(citation.score * 100)}%</span>
+              <details className="text-xs text-fg-3">
+                <summary className="inline-flex cursor-pointer select-none items-center gap-1 font-medium hover:text-fg-2"><Info className="size-3" aria-hidden /> Details</summary>
+                <div className="mt-2">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span>How closely this matches your question</span>
+                    <span className="font-mono tabular text-fg-2">{Math.round(citation.score * 100)}%</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-subtle">
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(4, Math.min(100, citation.score * 100))}%` }} />
+                  </div>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-subtle">
-                  <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(4, Math.min(100, citation.score * 100))}%` }} />
-                </div>
-              </div>
+              </details>
             )}
             {user?.role === 'student' && (
               <Button iconRight={ExternalLink} variant="secondary" onClick={() => { setCitation(null); onNavigate?.('documents', { doc: citation.document_id, page: citation.page_number }); }}>
-                Open in Sources at page {citation.page_number}
+                Open in Study Materials at page {citation.page_number}
               </Button>
             )}
           </div>
@@ -629,10 +665,10 @@ export function AskScreen({ user, onNavigate }) {
       <Modal
         isOpen={!!toDelete}
         onClose={() => setToDelete(null)}
-        title="Delete this conversation?"
-        description={toDelete ? `“${toDelete.title}” will be removed from your history.` : ''}
+        title="Delete this chat?"
+        description={toDelete ? `“${toDelete.title}” will be removed from your chat history.` : ''}
         size="sm"
-        footer={<><Button variant="ghost" onClick={() => setToDelete(null)}>Cancel</Button><Button variant="danger" iconLeft={Trash2} onClick={remove}>Delete</Button></>}
+        footer={<><Button variant="ghost" onClick={() => setToDelete(null)}>Cancel</Button><Button variant="danger" iconLeft={Trash2} onClick={remove}>Delete chat</Button></>}
       />
     </div>
   );

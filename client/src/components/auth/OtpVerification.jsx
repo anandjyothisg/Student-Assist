@@ -119,13 +119,14 @@ export function OtpVerification({ onNavigate, email = '', setOtpState }) {
                 maxLength={LENGTH}
                 aria-label={`Digit ${i + 1}`}
                 aria-invalid={error ? true : undefined}
+                aria-describedby={error ? 'otp-error' : undefined}
                 className="field-control !h-14 !px-0 text-center font-mono text-xl font-medium tabular"
               />
             ))}
           </div>
         </fieldset>
 
-        {error && <ErrorState variant="inline" title="Verification failed" description={error} />}
+        {error && <div id="otp-error"><ErrorState variant="inline" title="That code didn’t work" description={error} /></div>}
 
         <Button type="submit" size="lg" fullWidth loading={loading}>
           {loading ? 'Verifying…' : 'Verify code'}

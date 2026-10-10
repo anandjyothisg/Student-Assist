@@ -4,35 +4,41 @@
  */
 
 import {
-  MessageCircle,   // Ask
-  BookOpen,        // Sources
-  GraduationCap,   // Courses
+  House,           // Home
+  MessageCircle,   // AI Assistant
+  BookOpen,        // Study Materials
+  GraduationCap,   // My Courses
   NotebookPen,     // Notebook
-  FolderOpen,      // Content
-  BarChart2,       // Insights
-  Activity,        // Status
+  FolderOpen,      // My Courses (teacher)
+  BarChart2,       // Class Insights
+  Activity,        // System Status
   Users,           // Users
-  Layers,          // Catalog
+  Layers,          // Courses (admin)
 } from 'lucide-react';
 
+/*
+ * Labels are what people see; `tab` is the internal route id (#/tab) and stays
+ * stable so bookmarks and links keep working.
+ */
 export const NAV_ITEMS = {
   student: [
-    { id: 'ask',      label: 'Ask',      icon: MessageCircle, tab: 'assistant', description: 'Ask questions about your course materials' },
-    { id: 'sources',  label: 'Sources',  icon: BookOpen,      tab: 'documents', description: 'Browse and read course materials' },
-    { id: 'courses',  label: 'Courses',  icon: GraduationCap, tab: 'courses',   description: 'Your courses and the course catalog' },
-    { id: 'notebook', label: 'Notebook', icon: NotebookPen,   tab: 'notebook',  description: 'Saved answers and flashcards' },
+    { id: 'home',      label: 'Home',            icon: House,         tab: 'home',      description: 'Start here: ask, continue a chat or open your materials' },
+    { id: 'assistant', label: 'AI Assistant',    short: 'Assistant', icon: MessageCircle, tab: 'assistant', description: 'Ask questions about your course materials' },
+    { id: 'materials', label: 'Study Materials', short: 'Materials', icon: BookOpen,      tab: 'documents', description: 'Read the notes and files from your courses' },
+    { id: 'courses',   label: 'My Courses',      short: 'Courses', icon: GraduationCap, tab: 'courses',   description: 'Your courses, and others you can join' },
+    { id: 'notebook',  label: 'Notebook',        icon: NotebookPen,   tab: 'notebook',  description: 'Saved answers and flashcards' },
   ],
   teacher: [
-    { id: 'content',  label: 'Content',  icon: FolderOpen,    tab: 'academic',  description: 'Your courses, units, topics and materials' },
-    { id: 'insights', label: 'Insights', icon: BarChart2,     tab: 'analytics', description: 'What your students are asking' },
-    { id: 'ask',      label: 'Ask',      icon: MessageCircle, tab: 'assistant', description: 'Check answers grounded in your materials' },
+    { id: 'courses',   label: 'My Courses',      short: 'Courses', icon: FolderOpen,    tab: 'academic',  description: 'Your courses, topics and files' },
+    { id: 'insights',  label: 'Class Insights',  short: 'Insights', icon: BarChart2,     tab: 'analytics', description: 'What your students are asking' },
+    { id: 'assistant', label: 'AI Assistant',    short: 'Assistant', icon: MessageCircle, tab: 'assistant', description: 'Try the assistant on your own materials' },
   ],
   admin: [
-    { id: 'status',   label: 'Status',   icon: Activity,      tab: 'dashboard', description: 'Platform health and activity' },
-    { id: 'users',    label: 'Users',    icon: Users,         tab: 'accounts',  description: 'People, roles and access' },
-    { id: 'catalog',  label: 'Catalog',  icon: Layers,        tab: 'academic',  description: 'Subjects, courses and teachers' },
-    { id: 'insights', label: 'Insights', icon: BarChart2,     tab: 'analytics', description: 'Assistant usage across every course' },
-    { id: 'ask',      label: 'Ask',      icon: MessageCircle, tab: 'assistant', description: 'Query the whole course library' },
+    { id: 'status',    label: 'System Status',   short: 'Status', icon: Activity,      tab: 'dashboard', description: 'Is everything working?' },
+    { id: 'users',     label: 'Users',           icon: Users,         tab: 'accounts',  description: 'People, roles and access' },
+    { id: 'courses',   label: 'Courses',         icon: Layers,        tab: 'academic',  description: 'Subjects, courses and teachers' },
+    { id: 'insights',  label: 'Class Insights',  short: 'Insights', icon: BarChart2,     tab: 'analytics', description: 'How students use the assistant' },
+    { id: 'assistant', label: 'AI Assistant',    short: 'Assistant', icon: MessageCircle, tab: 'assistant', description: 'Ask across every course' },
   ],
 };
 

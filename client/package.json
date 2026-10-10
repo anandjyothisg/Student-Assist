@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e:routing": "node e2e/routing.cjs 1440 && node e2e/routing.cjs 390",
+    "e2e:acceptance": "node e2e/acceptance.cjs e2e/out/acceptance 1440 light",
+    "e2e:landing": "node e2e/landing-screens.cjs e2e/out/landing --widths=1440,1280,1024,768,390,360 --themes=dark,light",
+    "e2e:screens": "node e2e/app-screens.cjs e2e/out/app"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -25,6 +29,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "playwright": "^1.64.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1"
   }

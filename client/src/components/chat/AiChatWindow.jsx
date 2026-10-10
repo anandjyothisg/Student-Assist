@@ -46,7 +46,8 @@ export function AiChatWindow({ courseId, contextLabel, suggestions = [] }) {
       );
       patch(() => ({ text: final.answer, status: final.status, citations: final.citations, streaming: false }));
     } catch (err) {
-      if (err.name !== 'AbortError') patch(() => ({ streaming: false, error: err.message, question: q }));
+      if (err.name === 'AbortError') patch((x) => ({ streaming: false, text: x.text ? `${x.text}\n\n_Stopped._` : '_Stopped._' }));
+      else { patch(() => ({ streaming: false, error: err.message, question: q })); setInput((cur) => cur || q); }
     } finally {
       setBusy(false);
     }
@@ -64,7 +65,7 @@ export function AiChatWindow({ courseId, contextLabel, suggestions = [] }) {
             <div className="flex flex-col items-start gap-3">
               <span className="inline-flex size-9 items-center justify-center rounded-lg bg-accent-dim text-accent"><Sparkles className="size-[18px]" aria-hidden /></span>
               <div>
-                <h2 className="text-[15px] font-semibold text-fg">Ask about this course</h2>
+                <h2 className="text-[15px] font-semibold text-fg">Ask AI about this course</h2>
                 <p className="mt-1 text-[13px] leading-relaxed text-fg-3">
                   Answers come from <span className="text-fg-2">{contextLabel || 'this course'}</span> and cite the pages they use.
                 </p>
@@ -91,7 +92,7 @@ export function AiChatWindow({ courseId, contextLabel, suggestions = [] }) {
                 );
               }
               if (m.error) {
-                return <ErrorState key={m.id} variant="inline" title="No answer" description={m.error} onRetry={busy ? undefined : () => send(m.question)} />;
+                return <ErrorState key={m.id} variant="inline" title="Couldn’t get an answer" description={m.error} onRetry={busy ? undefined : () => send(m.question)} />;
               }
               if (m.status === 'not_found') {
                 return (
@@ -109,7 +110,7 @@ export function AiChatWindow({ courseId, contextLabel, suggestions = [] }) {
                   {m.streaming && !m.text ? (
                     <div className="flex items-center gap-2 text-[13px] text-fg-3" role="status">
                       <span className="ai-dot" /><span className="ai-dot" /><span className="ai-dot" />
-                      <span className="ml-1">Reading the material…</span>
+                      <span className="ml-1">Thinking…</span>
                     </div>
                   ) : (
                     <Markdown className="!text-[13.5px]">{m.text}</Markdown>
@@ -133,7 +134,7 @@ export function AiChatWindow({ courseId, contextLabel, suggestions = [] }) {
       </div>
 
       <div className="shrink-0 border-t border-border p-3">
-        <Composer value={input} onChange={setInput} onSubmit={() => send()} loading={busy} placeholder="Ask about this course…" label="Ask the copilot" maxRows={5} />
+        <Composer value={input} onChange={setInput} onSubmit={() => send()} onStop={() => abortRef.current?.abort()} loading={busy} placeholder="Ask about this course…" label="Your question about this course" maxRows={5} />
       </div>
     </div>
   );

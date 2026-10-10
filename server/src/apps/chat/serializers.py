@@ -37,11 +37,13 @@ class ChatSessionListSerializer(_SessionBase):
         fields = ["id", "course", "course_code", "course_title", "title", "message_count", "last_message", "created_at", "updated_at"]
 
     def get_last_message(self, obj):
-        last = obj.messages.order_by("-created_at").first()
-        if not last:
+        content = getattr(obj, "last_content", None)
+        if content is None:
+            last = obj.messages.order_by("-created_at").first()
+            content = last.content if last else None
+        if not content:
             return None
-        text = " ".join(last.content.split())
-        return text[:140]
+        return " ".join(content.split())[:140]
 
 
 class ChatSessionDetailSerializer(_SessionBase):

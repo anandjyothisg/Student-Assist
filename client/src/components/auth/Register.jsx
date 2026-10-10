@@ -8,14 +8,14 @@ import { ErrorState } from '../ui/ErrorState';
 import { AuthStep, TextLink, EMAIL_PATTERN, STRONG_PASSWORD } from './AuthLayout';
 import { mockAuthApi } from './api';
 
-export function PasswordChecklist({ value = '' }) {
+export function PasswordChecklist({ value = '', id }) {
   const rules = [
     { ok: value.length >= 8, label: '8+ characters' },
     { ok: /[A-Z]/.test(value) && /[a-z]/.test(value), label: 'Upper & lowercase' },
     { ok: /\d/.test(value), label: 'A number' },
   ];
   return (
-    <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Password requirements">
+    <ul id={id} className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Password requirements">
       {rules.map((r) => (
         <li key={r.label} className={`flex items-center gap-1.5 text-xs transition-colors ${r.ok ? 'text-success' : 'text-fg-3'}`}>
           <span className={`inline-flex size-3.5 items-center justify-center rounded-full ${r.ok ? 'bg-success-dim' : 'border border-border-strong'}`}>
@@ -101,6 +101,7 @@ export function Register({ onNavigate, onRegistered }) {
             revealable
             autoComplete="new-password"
             placeholder="Create a password"
+            aria-describedby="register-pw-rules"
             error={errors.password?.message}
             {...register('password', {
               required: 'Create a password.',
@@ -108,7 +109,7 @@ export function Register({ onNavigate, onRegistered }) {
               pattern: { value: STRONG_PASSWORD, message: 'Include upper and lowercase letters and a number.' },
             })}
           />
-          <PasswordChecklist value={passwordVal} />
+          <PasswordChecklist id="register-pw-rules" value={passwordVal} />
         </div>
         <Input
           label="Confirm password"
